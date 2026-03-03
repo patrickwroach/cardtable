@@ -115,7 +115,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => 
 
           {otherPlayers.map(player => (
             <div key={player.id} className="opponent-section">
-              <h4>{player.name}'s Hand ({player.hand.length} cards)</h4>
+              <h4>{player.name}&apos;s Hand ({player.hand.length} cards)</h4>
               <div className="opponent-hand">
                 {player.hand.map((card, idx) => (
                   <div key={`${player.id}-${idx}`} className="opponent-card"></div>
