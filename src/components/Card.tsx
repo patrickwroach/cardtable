@@ -7,45 +7,54 @@ interface CardProps {
   size?: 'small' | 'medium' | 'large';
 }
 
-const suitSymbols = {
-  hearts: '♥',
+const suitSymbols: Record<CardType['suit'], string> = {
+  hearts:   '♥',
   diamonds: '♦',
-  clubs: '♣',
-  spades: '♠'
+  clubs:    '♣',
+  spades:   '♠',
 };
 
-const suitColors = {
-  hearts: 'red',
+// Dynamic per-card color — inline style is appropriate here (FEAT-007 runtime value).
+const suitColors: Record<CardType['suit'], string> = {
+  hearts:   'red',
   diamonds: 'red',
-  clubs: 'black',
-  spades: 'black'
+  clubs:    'black',
+  spades:   'black',
+};
+
+const sizeClass: Record<NonNullable<CardProps['size']>, string> = {
+  small:  'card--sm',
+  medium: 'card--md',
+  large:  'card--lg',
 };
 
 export const Card: React.FC<CardProps> = ({ card, onClick, size = 'medium' }) => {
+  const sz = sizeClass[size];
+
   if (!card.faceUp) {
     return (
-      <div className={`card card-back ${size}`} onClick={onClick}>
-        <div className="card-pattern"></div>
+      <div className={`card card--back ${sz}`} onClick={onClick}>
+        <div className="card__pattern" />
       </div>
     );
   }
 
   return (
-    <div 
-      className={`card card-face ${size}`} 
+    <div
+      className={`card card--face ${sz}`}
       onClick={onClick}
       style={{ color: suitColors[card.suit] }}
     >
-      <div className="card-corner top-left">
-        <div className="rank">{card.rank}</div>
-        <div className="suit">{suitSymbols[card.suit]}</div>
+      <div className="card__corner card__corner--top-left">
+        <span className="card__rank">{card.rank}</span>
+        <span className="card__suit">{suitSymbols[card.suit]}</span>
       </div>
-      <div className="card-center">
-        <span className="suit-large">{suitSymbols[card.suit]}</span>
+      <div className="card__center">
+        <span className="card__suit--large">{suitSymbols[card.suit]}</span>
       </div>
-      <div className="card-corner bottom-right">
-        <div className="rank">{card.rank}</div>
-        <div className="suit">{suitSymbols[card.suit]}</div>
+      <div className="card__corner card__corner--bottom-right">
+        <span className="card__rank">{card.rank}</span>
+        <span className="card__suit">{suitSymbols[card.suit]}</span>
       </div>
     </div>
   );

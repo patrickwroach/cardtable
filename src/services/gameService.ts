@@ -72,8 +72,7 @@ export async function startGame(gameId: string): Promise<void> {
   if (!snap.exists()) throw new Error('Room not found');
   const data = snap.data() as GameState;
   const firstPlayer = Object.keys(data.players)[0];
-  const gameRef2 = doc(db, ROOMS_COLLECTION, gameId);
-  await updateDoc(gameRef2, {
+  await updateDoc(gameRef, {
     status: 'playing',
     activePlayerId: firstPlayer,
   });

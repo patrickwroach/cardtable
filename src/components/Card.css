@@ -1,11 +1,17 @@
+/* --------------------------------------------------------------------------
+   Card — BEM stylesheet
+   Complex visual styles that Tailwind utilities cannot express cleanly:
+   card back gradient pattern, absolute-positioned corners, size variants.
+   -------------------------------------------------------------------------- */
+
 .card {
   position: relative;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  border: 1px solid #ddd;
+  border: 1px solid #e5e7eb;
 }
 
 .card:hover {
@@ -13,32 +19,20 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-.card.small {
-  width: 60px;
-  height: 84px;
-  font-size: 10px;
-}
+/* -- Size modifiers -- */
+.card--sm { width: 60px;  height: 84px;  font-size: 10px; }
+.card--md { width: 80px;  height: 112px; font-size: 14px; }
+.card--lg { width: 100px; height: 140px; font-size: 16px; }
 
-.card.medium {
-  width: 80px;
-  height: 112px;
-  font-size: 14px;
-}
-
-.card.large {
-  width: 100px;
-  height: 140px;
-  font-size: 16px;
-}
-
-.card-back {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+/* -- Back face -- */
+.card--back {
+  background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-dark) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.card-pattern {
+.card__pattern {
   width: 80%;
   height: 80%;
   background-image: repeating-linear-gradient(
@@ -51,49 +45,34 @@
   border-radius: 4px;
 }
 
-.card-face {
+/* -- Front face -- */
+.card--face {
   display: flex;
   flex-direction: column;
   padding: 8px;
 }
 
-.card-corner {
+/* -- Corners (absolute-positioned rank + suit label) -- */
+.card__corner {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
   line-height: 1;
 }
 
-.card-corner.top-left {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-}
+.card__corner--top-left    { top: 8px;    left: 8px; }
+.card__corner--bottom-right { bottom: 8px; right: 8px; transform: rotate(180deg); }
 
-.card-corner.bottom-right {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  transform: rotate(180deg);
-}
+.card__rank { font-weight: bold; font-size: 1.2em; }
+.card__suit { font-size: 1em; margin-top: 2px; }
 
-.rank {
-  font-weight: bold;
-  font-size: 1.2em;
-}
-
-.suit {
-  font-size: 1em;
-  margin-top: 2px;
-}
-
-.card-center {
+/* -- Center pip -- */
+.card__center {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.suit-large {
-  font-size: 3em;
-}
+.card__suit--large { font-size: 3em; }

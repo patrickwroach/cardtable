@@ -1,7 +1,47 @@
-@import '../src/index.css';
-@import '../src/App.css';
-@import '../src/components/Card.css';
-@import '../src/components/GameLobby.css';
-@import '../src/components/GameRoom.css';
-@import '../src/components/GameTable.css';
-@import '../src/components/PlayerHand.css';
+@import "tailwindcss";
+
+/* Tailwind-imported BEM stylesheets — only files with complex styles Tailwind
+   cannot handle cleanly (card visual face/back, hand card overlap). */
+@import "../src/components/Card.css";
+@import "../src/components/PlayerHand.css";
+
+/* --------------------------------------------------------------------------
+   Brand theme tokens — referenced via var(--color-brand) or Tailwind
+   arbitrary values where needed.
+   -------------------------------------------------------------------------- */
+@theme {
+  --color-brand:      #667eea;
+  --color-brand-dark: #764ba2;
+}
+
+/* --------------------------------------------------------------------------
+   Reusable authored component classes (BEM).
+   Used for button variants shared across Lobby and Room.
+   -------------------------------------------------------------------------- */
+@layer components {
+  .btn-primary {
+    @apply flex-1 py-3.5 px-6 rounded-lg font-semibold text-base cursor-pointer border-0
+           text-white transition-transform duration-200
+           hover:-translate-y-0.5
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+    background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-dark) 100%);
+  }
+
+  .btn-secondary {
+    @apply flex-1 py-3.5 px-6 rounded-lg font-semibold text-base cursor-pointer
+           bg-transparent border-2 border-indigo-500 text-indigo-600
+           transition-transform duration-200
+           hover:-translate-y-0.5
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+  }
+
+  /* Standalone (non-flex) button variant used in GameRoom waiting section */
+  .btn-primary--block {
+    @apply py-3.5 px-8 rounded-lg font-semibold text-base cursor-pointer border-0
+           text-white transition-transform duration-200
+           hover:-translate-y-0.5
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
+    background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-dark) 100%);
+  }
+}
+
