@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------------
+    // FEAT-003/004/005/006 — rooms collection
+    // -----------------------------------------------------------------------
+    match /rooms/{roomId} {
+      // Any signed-in user (anonymous included) can read a room
+      allow read: if request.auth != null;
+
+      // Any signed-in user can create a room
+      allow create: if request.auth != null;
+
+      // Only players already in the room, or the host, can mutate it.
+      // Post-terminal rooms are immutable (FEAT-006 FR-4).
+      allow update: if request.auth != null
+        && resource.data.status != 'finished'
+        && resource.data.status != 'aborted'
+        && (
+          request.auth.uid == resource.data.hostId
+          || request.auth.uid in resource.data.players
+        );
+
+      // Only the host can delete a room
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.hostId;
+    }
+
+    // -----------------------------------------------------------------------
+    // FEAT-007/008/009 — gameDefinitions collection
+    // -----------------------------------------------------------------------
+    match /gameDefinitions/{defId} {
+      // Any signed-in user can read definitions
+      allow read: if request.auth != null;
+
+      // Only the creator can write/update their own definition
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.creatorId;
+
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.creatorId;
+
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.creatorId;
+    }
+  }
+}

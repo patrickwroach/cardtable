@@ -15,14 +15,30 @@ export interface Player {
   joinedAt: number;
 }
 
+/** FEAT-006: How a session ended */
+export type EndReason = 'win-condition' | 'force-ended' | 'abandoned';
+
 export interface GameState {
   id: string;
   hostId: string;
   players: Record<string, Player>;
   deck: Card[];
   playedCards: Card[];
-  currentTurn?: string;
-  status: 'waiting' | 'playing' | 'finished';
+
+  // FEAT-004: Turn & phase orchestration
+  activePlayerId?: string;
+  phase?: string;
+
+  // FEAT-003/006: Room lifecycle status
+  status: 'waiting' | 'playing' | 'finished' | 'aborted';
+
+  // FEAT-006: Session completion
+  winner?: string;       // playerId of winner, if applicable
+  endReason?: EndReason;
+  endedBy?: string;      // playerId who triggered end (force-end or last action)
+
   createdAt: number;
-  gameRules?: string; // For future: different game types
+
+  /** Reference to the GameDefinition used for this room (FEAT-007/008) */
+  gameDefinitionId?: string;
 }

@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "lint:react": "react-doctor --no-ami",
     "lint:all": "npm run lint && npm run lint:react",
-    "preview": "next start"
+    "preview": "next start",
+    "emulators": "firebase emulators:start --only auth,firestore",
+    "local": "NEXT_PUBLIC_USE_EMULATOR=true next dev"
   },
   "dependencies": {
     "firebase": "^12.8.0",

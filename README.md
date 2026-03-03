@@ -29,7 +29,40 @@ npm run dev
 
 ## Firebase Setup
 
-Update Firebase credentials in `src/firebase/config.ts` before creating or joining games.
+Credentials are read from `.env.local`. Copy the example and fill in your values:
+
+```bash
+cp .env.local.example .env.local
+```
+
+The project is linked to the `cardtable-1c41e` Firebase project via `.firebaserc`. Firestore security rules are managed in `firestore.rules` and can be deployed with:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+### Prerequisites
+
+1. **Install dependencies and link Firebase CLI:**
+
+```bash
+npm install
+npm install -g firebase-tools
+firebase login
+```
+
+2. **Enable Anonymous Authentication** in the Firebase Console — the app uses anonymous sign-in to identify players without requiring account creation:
+   - Go to [Firebase Console → CardTable → Authentication → Sign-in method](https://console.firebase.google.com/project/cardtable-1c41e/authentication/providers)
+   - Enable **Anonymous**
+   - Save
+
+### Local Emulators (optional — for multi-client testing)
+
+```bash
+npx firebase emulators:start
+```
+
+Then set `NEXT_PUBLIC_USE_EMULATOR=true` in `.env.local` to route traffic to the local emulators (Auth `:9099`, Firestore `:8080`, UI `:4000`).
 
 ## Spec-Driven Development (SDD)
 
