@@ -1,0 +1,7 @@
+@import '../src/index.css';
+@import '../src/App.css';
+@import '../src/components/Card.css';
+@import '../src/components/GameLobby.css';
+@import '../src/components/GameRoom.css';
+@import '../src/components/GameTable.css';
+@import '../src/components/PlayerHand.css';
