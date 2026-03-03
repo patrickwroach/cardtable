@@ -2,33 +2,39 @@
 
 ## Product
 
-Card Game Platform — a real-time multiplayer web app where players can create and join game rooms and play card interactions live.
+Card Game Platform — a web app for rapid game iteration where creators define game configuration (cards + rules) and testers run live multiplayer sessions to validate gameplay.
 
 ## Primary Users
 
-- Casual players hosting games with friends.
-- Players joining by shared game ID.
+- Game creators (designers) who configure game definitions.
+- Game testers who join shared test rooms and play a session to completion.
 
 ## Core Outcomes
 
-- Create and join game sessions quickly.
-- Keep game state synchronized across clients.
-- Provide clear game state visibility (deck, played cards, player hands).
+- Let creators define and export a playable game configuration quickly.
+- Let testers join by code/link and complete a live session with synchronized state.
+- Keep the platform lightweight and low-cost for internal prototyping.
 
 ## Scope (Current)
 
-- Real-time room lifecycle: create, join, start, play basic turns.
-- Firebase-backed shared game state.
+- Creator configuration for:
+	- card definitions (name/type/effects),
+	- deck composition limits,
+	- turn/phase rules,
+	- win conditions,
+	- import/export of game configuration JSON.
+- Tester room lifecycle: create/join by code or link, host starts session, play through to completion.
+- Firebase-backed realtime shared game state.
 - Browser-based UI with Next.js + React.
 
 ## Out of Scope (Current)
 
-- Authentication beyond lightweight player identity.
-- Matchmaking/lobbies with discovery.
-- Multi-game rules engine beyond current base interactions.
+- Public matchmaking/discovery and social lobby features.
+- Heavy analytics pipeline (tester feedback is gathered offline).
+- Complex account/permissions system beyond minimal internal usage.
 
 ## Success Indicators
 
-- Players can start a game in under 60 seconds.
-- State updates are visible to all players within acceptable latency.
-- Error states are understandable and recoverable.
+- Creators can produce a valid game configuration and export it without engineer intervention.
+- Testers can join a room and complete a full test session from start to game end.
+- Team can repeatedly run test sessions at minimal operational cost.

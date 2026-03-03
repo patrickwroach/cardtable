@@ -2,44 +2,39 @@
 
 ## Scope
 
-Validates acceptance criteria in `FEAT-001-game-room-lifecycle.md` for create/join/start/draw/play and failure handling.
+Epic tracking plan for `FEAT-001-game-room-lifecycle.md`. Detailed validation is executed in child plans:
+
+- `TP-003-room-access-and-session-bootstrap.md`
+- `TP-004-turn-and-phase-orchestration.md`
+- `TP-005-realtime-sync-and-recovery.md`
+- `TP-006-session-completion-and-host-controls.md`
 
 ## Test Types
 
-- Unit:
-  - Deck utilities (`createDeck`, `drawCards` behavior).
-- Integration:
-  - Service-layer Firestore operations.
-- Manual E2E:
-  - Multi-browser create/join/play flow.
+- Unit: tracked in TP-003 to TP-006.
+- Integration: tracked in TP-003 to TP-006.
+- Manual E2E: tracked in TP-003 to TP-006.
 
 ## Scenarios
 
-1. Happy path:
-   - Host creates room, second player joins, host starts game, both draw and play.
-2. Validation/error path:
-   - Join with invalid room ID shows clear error.
-   - Draw from empty deck is blocked or returns controlled failure.
-3. Edge cases:
-   - Two players perform actions close in time; clients converge on same final state.
+1. All child test plans are executed and pass for planned phase.
+2. Cross-feature integration run confirms room bootstrap → play flow → completion path.
+3. Epic closeout confirms no open P0/P1 defects across TP-003 to TP-006.
 
 ## Test Data
 
-- Two player names.
-- One valid room ID from live create flow.
-- One invalid room ID.
+- Defined per child TP.
 
 ## Environment
 
 - Local:
   - `npm run dev`
-  - Firebase test project config
 - Staging:
-  - same scenarios before release
+  - Execute child TP smoke set before release
 
 ## Exit Criteria
 
-- All ACs from FEAT-001 pass.
+- All ACs from FEAT-003 to FEAT-006 pass for planned phase.
 - No P0/P1 defects remain open.
 
 ## Evidence
@@ -48,4 +43,4 @@ Validates acceptance criteria in `FEAT-001-game-room-lifecycle.md` for create/jo
   - `npm run lint`
   - `npm run build`
 - Manual notes:
-  - Browser A/B actions and observed state synchronization.
+  - Linked execution notes from TP-003 to TP-006.

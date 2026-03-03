@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved
+Approved (Epic)
 
 ## Owner
 
@@ -10,88 +10,78 @@ Project Maintainer
 
 ## Problem Statement
 
-Players need a fast, reliable way to create and join game rooms, start a game, and perform core card interactions with synchronized state.
+Game room lifecycle requirements were initially captured in one document, but implementation planning needs smaller, independently testable features.
 
 ## User Story
 
-As a player, I want to create or join a room and play cards in real time, so that I can play remotely with others.
+As a project maintainer, I want game room lifecycle work split into focused feature specs, so that delivery and testing can be sequenced predictably.
 
 ## Scope
 
 ### In Scope
 
-- Create game room.
-- Join game room by ID.
-- Host starts game.
-- Player draws card.
-- Player plays card.
-- Real-time updates to all connected players.
+- Defines decomposition and boundaries for room-lifecycle features.
+- Maintains shared context for child specs.
 
 ### Out of Scope
 
-- Advanced game rules/turn logic.
-- Matchmaking and public lobby browser.
-- Persistent user accounts.
+- Detailed acceptance criteria for each lifecycle sub-area (moved to child specs).
 
-## Functional Requirements
+## Feature Decomposition
 
-- FR-1: User can create a room and become host.
-- FR-2: User can join an existing room with valid room ID.
-- FR-3: Host can start game from waiting state.
-- FR-4: Players can draw from deck while cards remain.
-- FR-5: Players can play a card from their hand.
-- FR-6: UI reflects current game state changes in near real-time.
+- FEAT-003: Room Access & Session Bootstrap (MVP-now)
+- FEAT-004: Turn and Phase Orchestration (MVP-now)
+- FEAT-005: Realtime State Sync and Failure Recovery (Later-phase)
+- FEAT-006: Session Completion and Host Controls (MVP-now)
+
+## Suggested Implementation Order (Solo)
+
+1. FEAT-003 first: unblock room creation/join/start and establish end-to-end room entry.
+2. FEAT-004 next: enforce gameplay progression with turn/phase state.
+3. FEAT-006 next: ensure sessions can terminate cleanly and avoid stalled test runs.
+4. FEAT-005 last: harden realtime sync/recovery after core playable loop is stable.
 
 ## Acceptance Criteria
 
-- AC-1: Given a user enters a name and creates game, when creation succeeds, then a game ID is displayed and room state is visible.
-- AC-2: Given another user enters same game ID and name, when join succeeds, then both users see updated player list.
-- AC-3: Given host is in waiting state, when host starts game, then game status becomes `playing` for all players.
-- AC-4: Given a player clicks draw with non-empty deck, when operation succeeds, then deck count decrements and hand count increments.
-- AC-5: Given a player clicks a card in their hand, when operation succeeds, then card is removed from hand and appears in played cards.
-- AC-6: Given backend failure, when an operation fails, then user sees a clear error and can return to lobby.
+- AC-1: Child features FEAT-003 through FEAT-006 exist and have non-overlapping scope.
+- AC-2: Each child feature includes functional requirements and acceptance criteria.
+- AC-3: Traceability and QA references are defined per child feature.
 
 ## Edge Cases
 
-- Invalid or non-existent room ID on join.
-- Draw when deck is empty.
-- Play card not present in local hand.
-- Temporary network failure during state mutation.
+- Cross-feature ownership ambiguity for shared fields (e.g., `status`, `turn`, `winner`).
 
 ## Dependencies
 
-- Firebase Firestore availability and valid config.
-- Client connectivity for realtime subscriptions.
+- FEAT-003 through FEAT-006.
 
 ## Data / API Notes
 
-- Game document fields: `players`, `deck`, `playedCards`, `status`, `hostId`.
-- Primary operations in service layer:
-  - `createGame`
-  - `joinGame`
-  - `startGame`
-  - `drawCardFromDeck`
-  - `playCard`
-  - `subscribeToGame`
+- Shared room model and APIs are allocated in child specs to avoid duplication.
 
 ## Risks
 
-- Race conditions on simultaneous updates.
-- Firestore rules not restrictive enough.
+- Fragmentation if child specs diverge on shared domain terminology.
 
 ## Rollout Plan
 
-1. Validate Firebase config and rules in non-prod.
-2. Run lint/build and manual smoke checks.
-3. Release and monitor error logs.
+1. Implement FEAT-003.
+2. Implement FEAT-004.
+3. Implement FEAT-006.
+4. Implement FEAT-005.
+5. Execute child test plans and close this epic when all are done.
 
 ## Open Questions
 
-- Should start game require minimum player count?
-- Should draw/play be gated by turn ownership?
+- Do we require reconnect support as its own feature in this epic, or within FEAT-005?
 
 ## Traceability
 
 - Implementation PR(s): TBD
-- Test plan: `docs/specs/qa/TP-001-game-room-lifecycle.md`
+- Test plan: `docs/specs/qa/TP-001-game-room-lifecycle.md` (epic tracking)
+- Child features:
+  - `docs/specs/features/FEAT-003-room-access-and-session-bootstrap.md`
+  - `docs/specs/features/FEAT-004-turn-and-phase-orchestration.md`
+  - `docs/specs/features/FEAT-005-realtime-sync-and-recovery.md`
+  - `docs/specs/features/FEAT-006-session-completion-and-host-controls.md`
 - ADR(s): `docs/specs/adrs/ADR-0001-nextjs-app-router-migration.md`

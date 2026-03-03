@@ -24,6 +24,8 @@ npm run dev
 - `npm run build` - create a production build
 - `npm run start` - run the production server
 - `npm run lint` - run ESLint
+- `npm run lint:react` - run React Doctor diagnostics
+- `npm run lint:all` - run ESLint + React Doctor
 
 ## Firebase Setup
 
@@ -37,6 +39,7 @@ This project includes a lightweight SDD workflow in `docs/specs/`.
 - Project-level docs:
 	- `docs/specs/project/vision.md`
 	- `docs/specs/project/nfr.md`
+	- `docs/specs/project/engineering-standards.md`
 - Reusable templates:
 	- `docs/specs/templates/feature-spec.template.md`
 	- `docs/specs/templates/adr.template.md`

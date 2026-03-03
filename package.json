@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "lint:react": "react-doctor --no-ami",
+    "lint:all": "npm run lint && npm run lint:react",
     "preview": "next start"
   },
   "dependencies": {
@@ -22,6 +24,7 @@
     "eslint": "^9.39.1",
     "eslint-config-next": "^15.0.0",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "react-doctor": "^0.0.29",
     "typescript": "~5.9.3"
   }
 }
