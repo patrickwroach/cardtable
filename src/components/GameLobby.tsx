@@ -35,9 +35,9 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
       <div className="min-h-screen flex items-center justify-center p-5">
         <div className="bg-white/95 rounded-2xl p-10 max-w-lg w-full shadow-2xl">
           <h1 className="text-3xl font-bold text-center text-gray-800 mt-0 mb-2.5">
-            Card Game Platform
+            Card Table
           </h1>
-          <p className="text-gray-500 text-center mb-10 text-base">Multiplayer card games in real-time</p>
+          <p className="text-gray-500 text-center mb-10 text-base">Create and test stuff yo</p>
           <div className="flex flex-col gap-4">
             <button className="btn-primary" onClick={() => setMode('create')}>
               Create New Game
