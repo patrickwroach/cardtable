@@ -3,6 +3,12 @@ import React, { useState } from 'react';
 interface GameLobbyProps {
   onCreateGame: (playerName: string) => void;
   onJoinGame: (gameId: string, playerName: string) => void;
+  /** Called when joining via a ?join= URL param link */
+  onJoinByLink: (gameId: string, playerName: string) => void;
+  /** Pre-populate the join form with this room ID (from ?join= URL param) */
+  roomToJoin?: string | null;
+  /** Inline error to show in the join form (e.g. room not found) */
+  joinError?: string | null;
   /** Disables submit buttons while a create/join request is in-flight */
   loading?: boolean;
 }
@@ -10,11 +16,17 @@ interface GameLobbyProps {
 export const GameLobby: React.FC<GameLobbyProps> = ({
   onCreateGame,
   onJoinGame,
+  onJoinByLink,
+  roomToJoin,
+  joinError,
   loading = false,
 }) => {
   const [playerName, setPlayerName] = useState('');
-  const [gameId, setGameId]         = useState('');
-  const [mode, setMode]             = useState<'menu' | 'create' | 'join'>('menu');
+  const [gameId, setGameId]         = useState(roomToJoin ?? '');
+
+  // If arriving via a shareable link, go straight to the join form.
+  const initialMode = roomToJoin ? 'join' : 'menu';
+  const [mode, setMode] = useState<'menu' | 'create' | 'join'>(initialMode);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +35,12 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (playerName.trim() && gameId.trim()) onJoinGame(gameId.trim(), playerName.trim());
+    if (!playerName.trim() || !gameId.trim()) return;
+    if (roomToJoin && gameId.trim() === roomToJoin) {
+      onJoinByLink(gameId.trim(), playerName.trim());
+    } else {
+      onJoinGame(gameId.trim(), playerName.trim());
+    }
   };
 
   const inputClass =
@@ -92,10 +109,24 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
     );
   }
 
+  // join mode
   return (
     <div className="min-h-screen flex items-center justify-center p-5">
       <div className="bg-white/95 rounded-2xl p-10 max-w-lg w-full shadow-2xl">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mt-0 mb-8">Join Game</h2>
+        <h2 className="text-2xl font-bold text-center text-gray-800 mt-0 mb-8">
+          {roomToJoin ? 'Join Game via Link' : 'Join Game'}
+        </h2>
+
+        {/* Task 2.3: inline join error */}
+        {joinError && (
+          <div
+            role="alert"
+            className="bg-red-50 border border-red-300 text-red-700 rounded-lg px-4 py-3 mb-5 text-sm"
+          >
+            {joinError}
+          </div>
+        )}
+
         <form onSubmit={handleJoin}>
           <div className="mb-5">
             <label htmlFor="join-player-name" className={labelClass}>
@@ -129,14 +160,16 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
             <button type="submit" className="btn-primary" disabled={loading}>
               {loading ? 'Joining…' : 'Join Game'}
             </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setMode('menu')}
-              disabled={loading}
-            >
-              Back
-            </button>
+            {!roomToJoin && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setMode('menu')}
+                disabled={loading}
+              >
+                Back
+              </button>
+            )}
           </div>
         </form>
       </div>

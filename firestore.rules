@@ -14,6 +14,7 @@ service cloud.firestore {
       allow create: if request.auth != null;
 
       // Only players already in the room, or the host, can mutate it.
+      // Any authenticated user may join a waiting room (adds themselves to players).
       // Post-terminal rooms are immutable (FEAT-006 FR-4).
       allow update: if request.auth != null
         && resource.data.status != 'finished'
@@ -21,6 +22,7 @@ service cloud.firestore {
         && (
           request.auth.uid == resource.data.hostId
           || request.auth.uid in resource.data.players
+          || resource.data.status == 'waiting'
         );
 
       // Only the host can delete a room

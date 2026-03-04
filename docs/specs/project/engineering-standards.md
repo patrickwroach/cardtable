@@ -109,7 +109,7 @@ Avoid:
 
 - Every implemented FEAT must map to at least one TP execution note.
 - Validate happy path + one error path + one edge case.
-- Run `npm run lint`, `npm run lint:react`, and `npm run build` before marking work complete.
+- Run `npm run lint:all` and `npm run build` before marking work complete.
 - For realtime/session features, perform at least one multi-client manual check.
 
 ## Documentation Requirements
@@ -133,8 +133,7 @@ Work is acceptable only if all are true:
 
 - [ ] FEAT scope confirmed and unchanged (or updated in spec).
 - [ ] Acceptance criteria verified.
-- [ ] `npm run lint` passes.
-- [ ] `npm run lint:react` passes.
+- [ ] `npm run lint:all` passes.
 - [ ] `npm run build` passes.
 - [ ] Happy path, error path, and edge case checked.
 - [ ] Loading/empty/error UI states reviewed.

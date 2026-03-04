@@ -41,7 +41,6 @@ openspec/
 
 | Change | Domain | Phase |
 |--------|--------|-------|
-| `room-access-and-session-bootstrap` | room-lifecycle | MVP-now |
 | `turn-and-phase-orchestration` | room-lifecycle | MVP-now |
 | `session-completion-and-host-controls` | room-lifecycle | MVP-now |
 | `realtime-sync-and-recovery` | room-lifecycle | Later-phase |

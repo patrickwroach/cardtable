@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import type { GameState } from '../types/game';
 import { GameTable } from './GameTable';
 import { PlayerHand } from './PlayerHand';
-import { drawCardFromDeck, playCard, startGame } from '../services/gameService';
+import { drawCardFromDeck, playCard, startGame, generateShareableLink } from '../services/gameService';
+
+/** Minimum number of players required before the host can start. */
+const MIN_PLAYERS_TO_START = 2;
 
 interface GameRoomProps {
   game: GameState;
   currentPlayerId: string;
+  onLeave?: () => void;
 }
 
 const statusBadgeClass: Record<string, string> = {
@@ -23,12 +27,15 @@ const statusLabel: Record<string, string> = {
   aborted:  'Abandoned',
 };
 
-export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => {
-  const [actionError, setActionError] = useState<string | null>(null);
+export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLeave }) => {
+  const [actionError, setActionError]   = useState<string | null>(null);
+  const [linkCopied, setLinkCopied]     = useState(false);
 
-  const currentPlayer = game.players[currentPlayerId];
-  const isHost        = game.hostId === currentPlayerId;
-  const otherPlayers  = Object.values(game.players).filter((p) => p.id !== currentPlayerId);
+  const currentPlayer  = game.players[currentPlayerId];
+  const isHost         = game.hostId === currentPlayerId;
+  const otherPlayers   = Object.values(game.players).filter((p) => p.id !== currentPlayerId);
+  const playerCount    = Object.keys(game.players).length;
+  const canStart       = playerCount >= MIN_PLAYERS_TO_START;
 
   const handleDrawCard = async () => {
     setActionError(null);
@@ -64,6 +71,12 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => 
     navigator.clipboard.writeText(game.id);
   };
 
+  const copyShareLink = () => {
+    navigator.clipboard.writeText(generateShareableLink(game.id));
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
   return (
     <div className="max-w-[1400px] mx-auto px-5 py-5">
       {/* Header */}
@@ -96,6 +109,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => 
           <span className="bg-black/10 px-4 py-2 rounded-full text-sm font-semibold text-gray-800">
             {Object.keys(game.players).length} player(s)
           </span>
+          {onLeave && (
+            <button
+              className="bg-white/20 text-gray-800 border border-gray-300 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors hover:bg-white/50"
+              onClick={onLeave}
+            >
+              Leave
+            </button>
+          )}
         </div>
       </div>
 
@@ -137,13 +158,61 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => 
         </div>
       </div>
 
-      {/* Waiting state — host controls */}
-      {game.status === 'waiting' && isHost && (
-        <div className="bg-white/95 rounded-xl px-5 py-8 mb-5 text-center">
-          <p className="text-gray-500 mb-5 text-base">Waiting for players to join. Share the Game ID above.</p>
-          <button className="btn-primary--block" onClick={handleStartGame}>
-            Start Game
-          </button>
+      {/* Waiting state — share panel + host controls */}
+      {game.status === 'waiting' && (
+        <div className="bg-white/95 rounded-xl px-5 py-8 mb-5">
+          {/* Task 1.3: room code and shareable link */}
+          <div className="text-center mb-6">
+            <p className="text-gray-600 text-sm mb-3 font-semibold uppercase tracking-wide">Share this room</p>
+            <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
+              <span className="text-gray-500 text-sm">Room ID:</span>
+              <code className="bg-gray-100 px-3 py-1.5 rounded-md font-mono text-sm text-gray-800">
+                {game.id}
+              </code>
+              <button
+                className="bg-indigo-500 text-white border-0 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors hover:bg-indigo-600"
+                onClick={copyGameId}
+                aria-label="Copy room ID"
+              >
+                Copy ID
+              </button>
+            </div>
+            <button
+              className="bg-green-500 text-white border-0 px-4 py-2 rounded-md cursor-pointer text-sm transition-colors hover:bg-green-600"
+              onClick={copyShareLink}
+              aria-label="Copy shareable link"
+            >
+              {linkCopied ? '✓ Link copied!' : 'Copy share link'}
+            </button>
+          </div>
+
+          {/* Task 4.2: live roster with waiting count */}
+          <p className="text-center text-gray-500 text-sm mb-5">
+            {playerCount} player{playerCount !== 1 ? 's' : ''} in room
+            {!canStart && ` — need at least ${MIN_PLAYERS_TO_START} to start`}
+          </p>
+
+          {/* Task 5.2 & 5.3: start button host-only, disabled until min players met */}
+          {isHost && (
+            <div className="text-center">
+              <button
+                className="btn-primary--block"
+                onClick={handleStartGame}
+                disabled={!canStart}
+                title={!canStart ? `Need at least ${MIN_PLAYERS_TO_START} players to start` : undefined}
+              >
+                Start Game
+              </button>
+              {!canStart && (
+                <p className="text-gray-400 text-xs mt-2">
+                  Waiting for more players to join…
+                </p>
+              )}
+            </div>
+          )}
+          {!isHost && (
+            <p className="text-center text-gray-500 text-sm">Waiting for the host to start…</p>
+          )}
         </div>
       )}
 
@@ -174,9 +243,9 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId }) => 
                 {player.name}&apos;s Hand ({player.hand.length} cards)
               </h4>
               <div className="flex gap-2.5 flex-wrap">
-                {player.hand.map((_, idx) => (
+                {player.hand.map((card) => (
                   <div
-                    key={`${player.id}-${idx}`}
+                    key={card.id}
                     className="w-[60px] h-[84px] rounded-md"
                     style={{
                       background:

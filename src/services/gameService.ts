@@ -133,6 +133,32 @@ export function subscribeToGame(gameId: string, callback: (game: GameState) => v
 }
 
 // ---------------------------------------------------------------------------
+// FEAT-003: Shareable link helpers
+// ---------------------------------------------------------------------------
+
+/** Generates a shareable URL that encodes the room ID as a ?join= query param. */
+export function generateShareableLink(gameId: string): string {
+  const base =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : '';
+  return `${base}?join=${gameId}`;
+}
+
+/**
+ * Join a room via a resolved shareable link.
+ * Semantically distinct from joinGame (called from link flow, not manual input)
+ * but functionally identical — the link already carries the room ID.
+ */
+export async function joinGameByLink(
+  gameId: string,
+  playerId: string,
+  playerName: string
+): Promise<void> {
+  return joinGame(gameId, playerId, playerName);
+}
+
+// ---------------------------------------------------------------------------
 // FEAT-004: Turn & Phase Orchestration
 // ---------------------------------------------------------------------------
 
