@@ -6,11 +6,13 @@ import {
   updateDoc, 
   onSnapshot, 
   arrayUnion,
+  runTransaction,
 } from 'firebase/firestore';
 import type {Unsubscribe} from 'firebase/firestore';
 import { db } from '../firebase/config';
 import type { GameState, Player, EndReason } from '../types/game';
 import { createDeck, drawCards } from '../utils/deck';
+import { getGameDefinition } from './gameDefinitionService';
 
 // FEAT-003: renamed from 'games' → 'rooms' to match spec terminology
 const ROOMS_COLLECTION = 'rooms';
@@ -65,20 +67,35 @@ export async function joinGame(gameId: string, playerId: string, playerName: str
   });
 }
 
-// FEAT-003: host starts session — sets first activePlayerId from player list
+// FEAT-003/004: host starts session — sets first activePlayerId, initialises turn/phase
 export async function startGame(gameId: string): Promise<void> {
   const gameRef = doc(db, ROOMS_COLLECTION, gameId);
   const snap = await getDoc(gameRef);
   if (!snap.exists()) throw new Error('Room not found');
   const data = snap.data() as GameState;
   const firstPlayer = Object.keys(data.players)[0];
+
+  // Load first phase from game definition if one is attached (FEAT-004 Task 1.2)
+  let firstPhase: string | undefined;
+  if (data.gameDefinitionId) {
+    const def = await getGameDefinition(data.gameDefinitionId);
+    if (def && def.turnPhases.length > 0) {
+      firstPhase = def.turnPhases[0].id;
+    }
+  }
+
   await updateDoc(gameRef, {
     status: 'playing',
     activePlayerId: firstPlayer,
+    turn: 1,
+    ...(firstPhase !== undefined ? { phase: firstPhase } : {}),
   });
 }
 
 export async function drawCardFromDeck(gameId: string, playerId: string, count: number = 1): Promise<void> {
+  // FEAT-004 Task 3.2: guard — only the active player may draw
+  await validateTurnAction(gameId, playerId);
+
   const gameRef = doc(db, ROOMS_COLLECTION, gameId);
   const gameDoc = await getDoc(gameRef);
   
@@ -99,6 +116,9 @@ export async function drawCardFromDeck(gameId: string, playerId: string, count: 
 }
 
 export async function playCard(gameId: string, playerId: string, cardId: string): Promise<void> {
+  // FEAT-004 Task 3.2: guard — only the active player may play a card
+  await validateTurnAction(gameId, playerId);
+
   const gameRef = doc(db, ROOMS_COLLECTION, gameId);
   const gameDoc = await getDoc(gameRef);
   
@@ -163,33 +183,97 @@ export async function joinGameByLink(
 // ---------------------------------------------------------------------------
 
 /**
- * Advances to the next player's turn in round-robin order and optionally
- * transitions to the given phase. Both changes broadcast to all subscribers.
- */
-export async function advanceTurnOrPhase(
-  gameId: string,
-  nextPlayerId: string,
-  nextPhase?: string
-): Promise<void> {
-  const gameRef = doc(db, ROOMS_COLLECTION, gameId);
-  await updateDoc(gameRef, {
-    activePlayerId: nextPlayerId,
-    ...(nextPhase !== undefined ? { phase: nextPhase } : {}),
-  });
-}
-
-/**
- * Returns true when it is the given player's turn and the room is playing.
- * Use client-side before allowing gameplay actions (FEAT-004 gating).
+ * Validates that `playerId` is the active player in a live session.
+ * Throws an actionable Error if the check fails (FEAT-004 Task 3.1/3.3).
+ * Called by drawCardFromDeck and playCard as a server-side guard.
  */
 export async function validateTurnAction(
   gameId: string,
   playerId: string
-): Promise<boolean> {
+): Promise<void> {
   const snap = await getDoc(doc(db, ROOMS_COLLECTION, gameId));
-  if (!snap.exists()) return false;
+  if (!snap.exists()) throw new Error('Room not found');
   const data = snap.data() as GameState;
-  return data.status === 'playing' && data.activePlayerId === playerId;
+  if (data.status !== 'playing') throw new Error('The game is not in progress.');
+  if (data.activePlayerId !== playerId) {
+    const activePlayer = data.players[data.activePlayerId ?? ''];
+    const name = activePlayer?.name ?? 'another player';
+    throw new Error(`It is not your turn — waiting for ${name}.`);
+  }
+}
+
+/**
+ * Advances to the next player's turn in round-robin order and transitions
+ * the phase according to the game definition's `turnPhases` config.
+ * Only the current active player may call this.
+ * Writes all changes atomically via a Firestore transaction (FEAT-004 Tasks 2.1–2.3).
+ */
+export async function advanceTurnOrPhase(
+  gameId: string,
+  playerId: string
+): Promise<void> {
+  const gameRef = doc(db, ROOMS_COLLECTION, gameId);
+
+  // Read current state first so we can fetch the game definition outside the transaction
+  const snap = await getDoc(gameRef);
+  if (!snap.exists()) throw new Error('Room not found');
+  const data = snap.data() as GameState;
+
+  if (data.status !== 'playing') throw new Error('Session is not active.');
+  if (data.activePlayerId !== playerId)
+    throw new Error('Only the active player can advance the turn.');
+
+  // Compute next player (round-robin)
+  const playerIds = Object.keys(data.players);
+  const currentIndex = playerIds.indexOf(data.activePlayerId ?? playerIds[0]);
+  const nextIndex = (currentIndex + 1) % playerIds.length;
+  const nextPlayerId = playerIds[nextIndex];
+  const wrappedAround = nextIndex === 0;
+
+  // Compute next phase from game definition's turnPhases config (Task 2.2)
+  let nextPhase: string | undefined = data.phase;
+  let incrementTurn = wrappedAround; // default: new turn when all players have gone
+
+  if (data.gameDefinitionId) {
+    const def = await getGameDefinition(data.gameDefinitionId);
+    if (def && def.turnPhases.length > 0) {
+      const currentPhase = def.turnPhases.find((p) => p.id === data.phase);
+      if (!currentPhase) {
+        // Task 2.3: clear error on invalid phase (FEAT-004)
+        throw new Error(
+          `Phase "${data.phase}" not found in game definition — check your game configuration.`
+        );
+      }
+      if (currentPhase.transitions.length === 0) {
+        // No outgoing transitions: stay on this phase
+        if (wrappedAround) incrementTurn = true;
+      } else {
+        // Take the first valid transition (simple MVP rule evaluation)
+        const nextPhaseId = currentPhase.transitions[0].toPhaseId;
+        const nextPhaseIndex = def.turnPhases.findIndex((p) => p.id === nextPhaseId);
+        const currentPhaseIndex = def.turnPhases.findIndex((p) => p.id === currentPhase.id);
+        // Detect phase-graph cycle: stepping back to an earlier phase = new turn
+        if (nextPhaseIndex <= currentPhaseIndex) incrementTurn = true;
+        nextPhase = nextPhaseId;
+      }
+    }
+  }
+
+  // Write atomically — re-validate active player inside transaction to prevent races
+  await runTransaction(db, async (transaction) => {
+    const freshSnap = await transaction.get(gameRef);
+    if (!freshSnap.exists()) throw new Error('Room not found');
+    const fresh = freshSnap.data() as GameState;
+    if (fresh.activePlayerId !== playerId) {
+      throw new Error('Turn has already been advanced — please refresh.');
+    }
+    transaction.update(gameRef, {
+      activePlayerId: nextPlayerId,
+      turn: incrementTurn ? (fresh.turn ?? 1) + 1 : (fresh.turn ?? 1),
+      // Only write phase when it has a defined value — Firestore rejects undefined
+      ...(nextPhase !== undefined ? { phase: nextPhase } : {}),
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------

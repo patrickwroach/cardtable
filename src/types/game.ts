@@ -26,8 +26,9 @@ export interface GameState {
   playedCards: Card[];
 
   // FEAT-004: Turn & phase orchestration
+  turn?: number;          // 1-indexed turn counter
   activePlayerId?: string;
-  phase?: string;
+  phase?: string;         // Active phase ID from game definition
 
   // FEAT-003/006: Room lifecycle status
   status: 'waiting' | 'playing' | 'finished' | 'aborted';

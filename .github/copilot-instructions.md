@@ -41,7 +41,6 @@ openspec/
 
 | Change | Domain | Phase |
 |--------|--------|-------|
-| `turn-and-phase-orchestration` | room-lifecycle | MVP-now |
 | `session-completion-and-host-controls` | room-lifecycle | MVP-now |
 | `realtime-sync-and-recovery` | room-lifecycle | Later-phase |
 | `card-catalog-and-deck-constraints` | game-definition | MVP-now |

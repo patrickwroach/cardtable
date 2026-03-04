@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { GameState } from '../types/game';
 import { GameTable } from './GameTable';
 import { PlayerHand } from './PlayerHand';
-import { drawCardFromDeck, playCard, startGame, generateShareableLink } from '../services/gameService';
+import { drawCardFromDeck, playCard, startGame, generateShareableLink, advanceTurnOrPhase } from '../services/gameService';
 
 /** Minimum number of players required before the host can start. */
 const MIN_PLAYERS_TO_START = 2;
@@ -37,13 +37,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
   const playerCount    = Object.keys(game.players).length;
   const canStart       = playerCount >= MIN_PLAYERS_TO_START;
 
+  // FEAT-004: derived turn / phase values (Tasks 4.1–4.3)
+  const isMyTurn          = game.activePlayerId === currentPlayerId;
+  const activePlayerName  = game.activePlayerId ? game.players[game.activePlayerId]?.name : undefined;
+  const currentPhaseName  = game.phase ?? undefined;
+
   const handleDrawCard = async () => {
     setActionError(null);
     try {
       await drawCardFromDeck(game.id, currentPlayerId, 1);
     } catch (error) {
       console.error('Error drawing card:', error);
-      setActionError('Failed to draw card. Please try again.');
+      setActionError(error instanceof Error ? error.message : 'Failed to draw card. Please try again.');
     }
   };
 
@@ -53,7 +58,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
       await playCard(game.id, currentPlayerId, cardId);
     } catch (error) {
       console.error('Error playing card:', error);
-      setActionError('Failed to play card. Please try again.');
+      setActionError(error instanceof Error ? error.message : 'Failed to play card. Please try again.');
     }
   };
 
@@ -67,14 +72,42 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
     }
   };
 
+  // FEAT-004: advance the turn / phase (Task 4.3 + 2.1)
+  const handleEndTurn = async () => {
+    setActionError(null);
+    try {
+      await advanceTurnOrPhase(game.id, currentPlayerId);
+    } catch (error) {
+      console.error('Error advancing turn:', error);
+      setActionError(error instanceof Error ? error.message : 'Failed to advance turn.');
+    }
+  };
+
   const copyGameId = () => {
-    navigator.clipboard.writeText(game.id);
+    writeToClipboard(game.id);
   };
 
   const copyShareLink = () => {
-    navigator.clipboard.writeText(generateShareableLink(game.id));
+    writeToClipboard(generateShareableLink(game.id));
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  /** Clipboard helper: prefers the async API, falls back to execCommand for non-secure contexts. */
+  const writeToClipboard = (text: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(console.error);
+    } else {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.focus();
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
   };
 
   return (
@@ -219,15 +252,31 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
       {/* Playing state */}
       {game.status === 'playing' && (
         <>
-          <GameTable playedCards={game.playedCards} deckCount={game.deck.length} />
+          <GameTable
+            playedCards={game.playedCards}
+            deckCount={game.deck.length}
+            activePlayerName={activePlayerName}
+            currentPhaseName={currentPhaseName}
+            turn={game.turn}
+          />
 
           <div className="flex justify-center gap-4 my-5">
             <button
               className="btn-primary--block"
               onClick={handleDrawCard}
-              disabled={game.deck.length === 0}
+              disabled={!isMyTurn || game.deck.length === 0}
+              title={!isMyTurn ? 'Wait for your turn' : undefined}
             >
               Draw Card{game.deck.length > 0 && ` (${game.deck.length} left)`}
+            </button>
+            {/* FEAT-004: End Turn button — only enabled when it is this player's turn */}
+            <button
+              className="btn-primary--block"
+              onClick={handleEndTurn}
+              disabled={!isMyTurn}
+              title={!isMyTurn ? 'Wait for your turn' : undefined}
+            >
+              End Turn
             </button>
           </div>
 
@@ -235,6 +284,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
             cards={currentPlayer?.hand ?? []}
             onCardClick={handlePlayCard}
             isCurrentPlayer
+            isActive={isMyTurn}
           />
 
           {otherPlayers.map((player) => (

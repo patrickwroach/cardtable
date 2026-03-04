@@ -28,9 +28,18 @@ if (process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
 /**
  * Signs the current browser session in anonymously (FEAT-003).
  * Safe to call multiple times — resolves immediately if already signed in.
+ * If the persisted user is invalid (e.g. emulator restarted), signs in fresh.
  */
 export async function ensureAnonymousAuth(): Promise<string> {
-  if (auth.currentUser) return auth.currentUser.uid;
+  if (auth.currentUser) {
+    try {
+      // Validate the persisted user is still known to Auth (catches stale emulator sessions)
+      await auth.currentUser.reload();
+      return auth.currentUser.uid;
+    } catch {
+      // Stale / unknown user — fall through to fresh sign-in
+    }
+  }
   const credential = await signInAnonymously(auth);
   return credential.user.uid;
 }
