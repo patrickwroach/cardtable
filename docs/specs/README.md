@@ -1,33 +1,20 @@
-# Spec-Driven Development Guide
+# Project Documentation
 
-This folder defines a lightweight Spec-Driven Development (SDD) system for this repository.
-
-## Goals
-
-- Define requirements before implementation.
-- Make design tradeoffs explicit.
-- Tie implementation to measurable acceptance criteria.
-- Keep planning, delivery, and QA artifacts in one place.
+This folder contains stable project-level context that applies across all feature work.
+Active feature specs, design artifacts, and implementation tasks live in `openspec/`.
 
 ## Folder Structure
 
-- `project/` — stable project-level context
+- `project/` — project-level context (does not change with individual features)
   - `vision.md` — product goals, users, scope boundaries
   - `nfr.md` — non-functional requirements (performance, reliability, security)
   - `engineering-standards.md` — code quality bar and acceptable work gate
-- `features/` — feature specs (`FEAT-###-name.md`)
 - `adrs/` — architecture decision records (`ADR-####-title.md`)
-- `qa/` — feature test plans (`TP-###-name.md`)
-- `templates/` — reusable templates for all new work
 
-## Standard Document Set
+## Feature Work Lives in OpenSpec
 
-For each meaningful feature, create and maintain these documents:
-
-1. Feature Spec (`features/FEAT-###-name.md`)
-2. Optional ADR (`adrs/ADR-####-title.md`) when design tradeoffs matter
-3. Test Plan (`qa/TP-###-name.md`)
-4. Release Checklist entry (`templates/release-checklist.template.md` copied into PR description or release doc)
+All active and completed feature specs are managed through OpenSpec in the `openspec/` directory at the project root.
+See `.github/copilot-instructions.md` for the full workflow, slash commands, and active changes.
 
 ## Recommended Workflow
 
