@@ -10,7 +10,8 @@
     "lint:react": "react-doctor --no-ami",
     "lint:all": "npm run lint && npm run lint:react",
     "preview": "next start",
-    "emulators": "firebase emulators:start --only auth,firestore",
+    "emulators": "firebase emulators:start --only auth,firestore --import ./emulator-data --export-on-exit ./emulator-data",
+    "seed": "node scripts/seed-emulator.mjs",
     "local": "NEXT_PUBLIC_USE_EMULATOR=true next dev"
   },
   "dependencies": {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { GameLobby } from './components/GameLobby';
 import { GameRoom } from './components/GameRoom';
+import { GameDefinitionEditor } from './components/GameDefinitionEditor';
 import type { GameState } from './types/game';
 import { createGame, joinGame, joinGameByLink, subscribeToGame } from './services/gameService';
 import { ensureAnonymousAuth } from './firebase/config';
@@ -14,6 +15,7 @@ function App() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [lobbyError, setLobbyError] = useState<string | null>(null);
+  const [showDefinitionEditor, setShowDefinitionEditor] = useState(false);
 
   // Task 3.2: detect ?join=<gameId> URL param on mount
   const [roomToJoin] = useState<string | null>(() => {
@@ -142,15 +144,24 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-700 to-purple-800">
-      {!currentGame ? (
-        <GameLobby
-          onCreateGame={handleCreateGame}
-          onJoinGame={handleJoinGame}
-          onJoinByLink={handleJoinByLink}
-          roomToJoin={roomToJoin}
-          joinError={lobbyError}
-          loading={loading}
+      {showDefinitionEditor && playerId ? (
+        <GameDefinitionEditor
+          creatorId={playerId}
+          onClose={() => setShowDefinitionEditor(false)}
         />
+      ) : !currentGame ? (
+        <>
+          <GameLobby
+            onCreateGame={handleCreateGame}
+            onJoinGame={handleJoinGame}
+            onJoinByLink={handleJoinByLink}
+            roomToJoin={roomToJoin}
+            joinError={lobbyError}
+            loading={loading}
+            onOpenDefinitionEditor={() => setShowDefinitionEditor(true)}
+          />
+          {/* FEAT-007: definition editor access */}
+        </>
       ) : (
         <GameRoom game={currentGame} currentPlayerId={playerId} onLeave={handleBackToLobby} />
       )}

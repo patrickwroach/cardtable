@@ -117,14 +117,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
         <div>
           <h2 className="text-2xl font-bold text-gray-800 mt-0 mb-2.5">Card Game</h2>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-gray-500 text-sm">Game ID:</span>
+            <span className="text-gray-500 text-sm">Room ID:</span>
             <code className="bg-gray-100 px-3 py-1.5 rounded-md font-mono text-sm text-gray-800">
               {game.id}
             </code>
             <button
               className="bg-indigo-500 text-white border-0 px-3 py-1.5 rounded-md cursor-pointer text-sm transition-colors hover:bg-indigo-600"
               onClick={copyGameId}
-              aria-label="Copy game ID to clipboard"
+              aria-label="Copy room ID to clipboard"
             >
               Copy ID
             </button>

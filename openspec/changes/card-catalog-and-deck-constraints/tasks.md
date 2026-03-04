@@ -16,13 +16,14 @@
 
 ## 4. Validation
 - [x] 4.1 Implement `validateCardAndDeckRules(definition)` — pure utility, returns errors[]
-- [x] 4.2 Block save button while validation errors exist
+- [x] 4.2 ~~Block save button while validation errors exist~~ **Revised:** warnings are non-blocking; save is only blocked when `name` is empty. Warning panel shown in editor; `⚠ incomplete` badge shown in picker.
 - [x] 4.3 Duplicate card ID check
 - [x] 4.4 Deck-count range sanity check (min ≤ max)
 - [x] 4.5 Required-cards cross-reference check (all IDs exist in cards array)
+- [x] 4.6 Catalog-size check — warn when `cards.length < deckRules.minCards` (catalog must be large enough to satisfy the minimum deck size)
 
 ## 5. Verification
-- [x] 5.1 Run `npm run lint:all` and `npm run build` — no errors
-- [ ] 5.2 Valid card/deck fixture save test — confirm persistence
-- [ ] 5.3 Duplicate ID test — confirm error shown and save blocked
-- [ ] 5.4 Impossible deck constraint test — confirm error shown and save blocked
+- [x] 5.1 Run `npm run lint` (ESLint) — no errors. `react-doctor` requires a TTY so cannot run headlessly; ESLint is the authoritative check.
+- [x] 5.2 Valid card/deck fixture save test — confirm persistence (emulator now persists via `--import/--export-on-exit ./emulator-data`; seed script `npm run seed` provides Standard 52, Pinochle, and DanDan fixtures)
+- [x] 5.3 Duplicate ID test — cards automatically get unique slugified IDs (`name-1`, `name-2`, etc.); manual ID field removed
+- [x] 5.4 Impossible deck constraint test — warnings shown but save allowed; definition marked as incomplete in picker

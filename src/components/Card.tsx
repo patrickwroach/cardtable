@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Card as CardType } from '../types/game';
+import type { Card as CardType, Suit } from '../types/game';
 
 interface CardProps {
   card: CardType;
@@ -7,7 +7,7 @@ interface CardProps {
   size?: 'small' | 'medium' | 'large';
 }
 
-const suitSymbols: Record<CardType['suit'], string> = {
+const suitSymbols: Record<Suit, string> = {
   hearts:   '♥',
   diamonds: '♦',
   clubs:    '♣',
@@ -15,7 +15,7 @@ const suitSymbols: Record<CardType['suit'], string> = {
 };
 
 // Dynamic per-card color — inline style is appropriate here (FEAT-007 runtime value).
-const suitColors: Record<CardType['suit'], string> = {
+const suitColors: Record<Suit, string> = {
   hearts:   'red',
   diamonds: 'red',
   clubs:    'black',
@@ -39,23 +39,49 @@ export const Card: React.FC<CardProps> = ({ card, onClick, size = 'medium' }) =>
     );
   }
 
+  const symbol = card.suit ? suitSymbols[card.suit] : null;
+  const color  = card.suit ? suitColors[card.suit] : 'inherit';
+  const rankLabel = card.rank ?? null;
+  // For non-standard cards fall back to title, then a generic placeholder
+  const faceLabel = card.title ?? (rankLabel && symbol ? null : '?');
+
   return (
     <div
       className={`card card--face ${sz}`}
       onClick={onClick}
-      style={{ color: suitColors[card.suit] }}
+      style={{ color }}
     >
-      <div className="card__corner card__corner--top-left">
-        <span className="card__rank">{card.rank}</span>
-        <span className="card__suit">{suitSymbols[card.suit]}</span>
-      </div>
-      <div className="card__center">
-        <span className="card__suit--large">{suitSymbols[card.suit]}</span>
-      </div>
-      <div className="card__corner card__corner--bottom-right">
-        <span className="card__rank">{card.rank}</span>
-        <span className="card__suit">{suitSymbols[card.suit]}</span>
-      </div>
+      {faceLabel ? (
+        // Non-standard card: show title (and description if present) centred
+        <>
+          <div className="card__corner card__corner--top-left">
+            <span className="card__rank">{faceLabel}</span>
+          </div>
+          <div className="card__center">
+            <span className="card__rank" style={{ fontSize: '0.7em', textAlign: 'center', padding: '0 4px' }}>
+              {faceLabel}
+            </span>
+          </div>
+          <div className="card__corner card__corner--bottom-right">
+            <span className="card__rank">{faceLabel}</span>
+          </div>
+        </>
+      ) : (
+        // Standard playing card
+        <>
+          <div className="card__corner card__corner--top-left">
+            <span className="card__rank">{rankLabel}</span>
+            <span className="card__suit">{symbol}</span>
+          </div>
+          <div className="card__center">
+            <span className="card__suit--large">{symbol}</span>
+          </div>
+          <div className="card__corner card__corner--bottom-right">
+            <span className="card__rank">{rankLabel}</span>
+            <span className="card__suit">{symbol}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 };

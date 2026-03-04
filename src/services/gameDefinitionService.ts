@@ -4,44 +4,69 @@ import {
   setDoc,
   getDoc,
   getDocs,
-  query,
-  where,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import type { GameDefinition } from '../types/gameDefinition';
+import type { GameDefinition, CardDefinition } from '../types/gameDefinition';
 import { CURRENT_SCHEMA_VERSION } from '../types/gameDefinition';
 
 const DEFINITIONS_COLLECTION = 'gameDefinitions';
+
+// ---------------------------------------------------------------------------
+// FEAT-007: Card & Deck Constraint Validation (pure utility, Task 4.1/4.3/4.4/4.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates only the card catalog and deck rules portion of a definition.
+ * Returns an array of field-level error strings; empty = valid.
+ * Does NOT validate turn-phase graph or win conditions.
+ */
+export function validateCardAndDeckRules(
+  def: Pick<import('../types/gameDefinition').GameDefinition, 'cards' | 'deckRules'>
+): string[] {
+  const errors: string[] = [];
+
+  // Task 4.3: duplicate card ID check
+  const cardIds = new Set<string>();
+  for (const card of def.cards) {
+    if (!card.id) errors.push('A card is missing an id.');
+    else if (cardIds.has(card.id)) errors.push(`Duplicate card id: "${card.id}".`);
+    else cardIds.add(card.id);
+    if (!card.name) errors.push(`Card "${card.id || '?'}" is missing a name.`);
+  }
+
+  // Task 4.4: deck-count range sanity check
+  const { deckRules } = def;
+  if (deckRules.minCards < 1) errors.push('Minimum cards must be at least 1.');
+  if (deckRules.maxCards < deckRules.minCards)
+    errors.push('Maximum cards cannot be less than minimum cards.');
+
+  // Task 4.5: required-cards cross-reference check
+  for (const reqId of deckRules.requiredCardIds) {
+    if (!cardIds.has(reqId))
+      errors.push(`Deck rule references unknown card id: "${reqId}".`);
+  }
+
+  // Catalog-size check: catalog must be large enough to satisfy the minimum deck size
+  if (def.cards.length > 0 && def.cards.length < deckRules.minCards) {
+    errors.push(
+      `Card catalog has ${def.cards.length} card${def.cards.length !== 1 ? 's' : ''} but minimum deck size is ${deckRules.minCards}.`
+    );
+  }
+
+  return errors;
+}
 
 // ---------------------------------------------------------------------------
 // FEAT-007 / FEAT-008: Save (create or update) a game definition
 // ---------------------------------------------------------------------------
 
 /**
- * Validates card & deck rules (FEAT-007) and rule/win-condition consistency
- * (FEAT-008) before persisting to Firestore.
+ * Full definition validation: card/deck rules + turn-phase graph + win conditions.
  * Throws an array of human-readable error strings when validation fails.
  */
 export function validateGameDefinition(def: GameDefinition): string[] {
-  const errors: string[] = [];
-
-  // FEAT-007: card catalog
-  const cardIds = new Set<string>();
-  for (const card of def.cards) {
-    if (!card.id || !card.name) errors.push(`Card is missing id or name.`);
-    if (cardIds.has(card.id)) errors.push(`Duplicate card id: "${card.id}".`);
-    cardIds.add(card.id);
-  }
-
-  // FEAT-007: deck rules
-  const { deckRules } = def;
-  if (deckRules.minCards < 1) errors.push('Deck must require at least 1 card.');
-  if (deckRules.maxCards < deckRules.minCards)
-    errors.push('maxCards cannot be less than minCards.');
-  for (const reqId of deckRules.requiredCardIds) {
-    if (!cardIds.has(reqId))
-      errors.push(`Deck rule references unknown card id: "${reqId}".`);
-  }
+  // Reuse the card/deck utility (FEAT-007)
+  const errors: string[] = validateCardAndDeckRules(def);
 
   // FEAT-008: phase graph — no orphaned transitions
   const phaseIds = new Set(def.turnPhases.map((p) => p.id));
@@ -65,10 +90,11 @@ export function validateGameDefinition(def: GameDefinition): string[] {
   return errors;
 }
 
-/** Persists a game definition after validation. Throws on validation failure. */
+/** Persists a game definition. Only requires a non-empty name; card/deck warnings are
+ * non-blocking (definitions can be saved as incomplete).
+ */
 export async function saveGameDefinition(def: GameDefinition): Promise<void> {
-  const errors = validateGameDefinition(def);
-  if (errors.length > 0) throw new Error(errors.join('\n'));
+  if (!def.name.trim()) throw new Error('Definition name is required.');
 
   const ref = doc(db, DEFINITIONS_COLLECTION, def.id);
   await setDoc(ref, { ...def, updatedAt: Date.now() }, { merge: true });
@@ -80,16 +106,68 @@ export async function getGameDefinition(defId: string): Promise<GameDefinition |
   return snap.exists() ? (snap.data() as GameDefinition) : null;
 }
 
-/** Lists all definitions created by the given user (FEAT-007 CRUD). */
-export async function listGameDefinitionsByCreator(
-  creatorId: string
-): Promise<GameDefinition[]> {
-  const q = query(
-    collection(db, DEFINITIONS_COLLECTION),
-    where('creatorId', '==', creatorId)
-  );
-  const snap = await getDocs(q);
+/** Lists all game definitions visible to the current user.
+ * TODO(game-definition-access-control): filter to creator + collaborators once user model exists.
+ */
+export async function listGameDefinitions(): Promise<GameDefinition[]> {
+  const snap = await getDocs(collection(db, DEFINITIONS_COLLECTION));
   return snap.docs.map((d) => d.data() as GameDefinition);
+}
+
+// ---------------------------------------------------------------------------
+// FEAT-007: Card CRUD helpers (Tasks 2.1–2.3)
+// These operate on a draft GameDefinition in memory; call saveGameDefinition to persist.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a new definition with the card appended (Task 2.1).
+ * Throws if the card id already exists.
+ */
+export function addCard(
+  def: GameDefinition,
+  card: CardDefinition
+): GameDefinition {
+  if (def.cards.some((c) => c.id === card.id)) {
+    throw new Error(`Card id "${card.id}" already exists in this definition.`);
+  }
+  return { ...def, cards: [...def.cards, card], updatedAt: Date.now() };
+}
+
+/**
+ * Returns a new definition with the matching card replaced (Task 2.2).
+ * Throws if the card id is not found.
+ */
+export function updateCard(
+  def: GameDefinition,
+  updated: CardDefinition
+): GameDefinition {
+  if (!def.cards.some((c) => c.id === updated.id)) {
+    throw new Error(`Card id "${updated.id}" not found in this definition.`);
+  }
+  return {
+    ...def,
+    cards: def.cards.map((c) => (c.id === updated.id ? updated : c)),
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Returns a new definition with the card removed (Task 2.3).
+ * Also removes the card id from deckRules.requiredCardIds to prevent dangling refs.
+ */
+export function deleteCard(
+  def: GameDefinition,
+  cardId: string
+): GameDefinition {
+  return {
+    ...def,
+    cards: def.cards.filter((c) => c.id !== cardId),
+    deckRules: {
+      ...def.deckRules,
+      requiredCardIds: def.deckRules.requiredCardIds.filter((id) => id !== cardId),
+    },
+    updatedAt: Date.now(),
+  };
 }
 
 // ---------------------------------------------------------------------------

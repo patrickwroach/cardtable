@@ -1,11 +1,32 @@
 export type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
 export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 
+/**
+ * Describes how a card interacts with game rules.
+ * Phase/turn restrictions are matched against the active room state at play-time.
+ */
+export interface CardEffect {
+  /** Human-readable description of what this card does when played */
+  description?: string;
+  /** Phase IDs during which this card may be played; undefined/empty = no restriction */
+  allowedPhaseIds?: string[];
+  /** Whether playing this card immediately ends the active player's turn */
+  endsTurn?: boolean;
+}
+
 export interface Card {
   id: string;
-  suit: Suit;
-  rank: Rank;
+  suit?: Suit;
+  rank?: Rank;
   faceUp: boolean;
+  /** Display title shown on the card face (not unique) */
+  title?: string;
+  /** Flavour or rules text printed on the card face */
+  description?: string;
+  /** Optional art URL for this card */
+  imageUrl?: string;
+  /** Rule interactions for this card (phase gating, turn effects, etc.) */
+  effects?: CardEffect;
 }
 
 export interface Player {

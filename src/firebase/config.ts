@@ -26,6 +26,29 @@ if (process.env.NEXT_PUBLIC_USE_EMULATOR === 'true') {
 }
 
 /**
+ * Returns all creator IDs this browser has ever used (persisted across sessions).
+ * Used to query game definitions that were created under a previous anonymous UID.
+ */
+function getKnownCreatorIds(): string[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem('knownCreatorIds') ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+function addKnownCreatorId(uid: string) {
+  if (typeof localStorage === 'undefined') return;
+  const existing = getKnownCreatorIds();
+  if (!existing.includes(uid)) {
+    localStorage.setItem('knownCreatorIds', JSON.stringify([...existing, uid]));
+  }
+}
+
+export { getKnownCreatorIds };
+
+/**
  * Signs the current browser session in anonymously (FEAT-003).
  * Safe to call multiple times — resolves immediately if already signed in.
  * If the persisted user is invalid (e.g. emulator restarted), signs in fresh.
@@ -35,11 +58,13 @@ export async function ensureAnonymousAuth(): Promise<string> {
     try {
       // Validate the persisted user is still known to Auth (catches stale emulator sessions)
       await auth.currentUser.reload();
+      addKnownCreatorId(auth.currentUser.uid);
       return auth.currentUser.uid;
     } catch {
       // Stale / unknown user — fall through to fresh sign-in
     }
   }
   const credential = await signInAnonymously(auth);
+  addKnownCreatorId(credential.user.uid);
   return credential.user.uid;
 }

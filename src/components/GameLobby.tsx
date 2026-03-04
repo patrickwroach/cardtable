@@ -11,6 +11,8 @@ interface GameLobbyProps {
   joinError?: string | null;
   /** Disables submit buttons while a create/join request is in-flight */
   loading?: boolean;
+  /** Opens the game definition editor */
+  onOpenDefinitionEditor?: () => void;
 }
 
 export const GameLobby: React.FC<GameLobbyProps> = ({
@@ -20,6 +22,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
   roomToJoin,
   joinError,
   loading = false,
+  onOpenDefinitionEditor,
 }) => {
   const [playerName, setPlayerName] = useState('');
   const [gameId, setGameId]         = useState(roomToJoin ?? '');
@@ -57,11 +60,16 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
           <p className="text-gray-500 text-center mb-10 text-base">Create and test stuff yo</p>
           <div className="flex flex-col gap-4">
             <button className="btn-primary" onClick={() => setMode('create')}>
-              Create New Game
+              Create New Room
             </button>
             <button className="btn-secondary" onClick={() => setMode('join')}>
-              Join Existing Game
+              Join Existing Room
             </button>
+            {onOpenDefinitionEditor && (
+              <button className="btn-secondary" onClick={onOpenDefinitionEditor}>
+                Game Definition Editor
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -73,7 +81,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
       <div className="min-h-screen flex items-center justify-center p-5">
         <div className="bg-white/95 rounded-2xl p-10 max-w-lg w-full shadow-2xl">
           <h2 className="text-2xl font-bold text-center text-gray-800 mt-0 mb-8">
-            Create New Game
+            Create New Room
           </h2>
           <form onSubmit={handleCreate}>
             <div className="mb-5">
@@ -92,7 +100,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
             </div>
             <div className="flex gap-3 mt-8">
               <button type="submit" className="btn-primary" disabled={loading}>
-                {loading ? 'Creating…' : 'Create Game'}
+                {loading ? 'Creating…' : 'Create Room'}
               </button>
               <button
                 type="button"
@@ -114,7 +122,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
     <div className="min-h-screen flex items-center justify-center p-5">
       <div className="bg-white/95 rounded-2xl p-10 max-w-lg w-full shadow-2xl">
         <h2 className="text-2xl font-bold text-center text-gray-800 mt-0 mb-8">
-          {roomToJoin ? 'Join Game via Link' : 'Join Game'}
+          {roomToJoin ? 'Join Room via Link' : 'Join Room'}
         </h2>
 
         {/* Task 2.3: inline join error */}
@@ -144,21 +152,21 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
           </div>
           <div className="mb-5">
             <label htmlFor="join-game-id" className={labelClass}>
-              Game ID
+              Room ID
             </label>
             <input
               id="join-game-id"
               type="text"
               value={gameId}
               onChange={(e) => setGameId(e.target.value)}
-              placeholder="Enter game ID"
+              placeholder="Enter room ID"
               required
               className={inputClass}
             />
           </div>
           <div className="flex gap-3 mt-8">
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Joining…' : 'Join Game'}
+              {loading ? 'Joining…' : 'Join Room'}
             </button>
             {!roomToJoin && (
               <button

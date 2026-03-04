@@ -7,6 +7,8 @@ export interface CardDefinition {
   id: string;
   name: string;
   description?: string;
+  /** Card type / category (e.g. "standard", "action") — FEAT-007 */
+  type?: string;
   /** Arbitrary metadata (effects, point value, etc.) stored as key-value pairs */
   metadata?: Record<string, string | number | boolean>;
 }
