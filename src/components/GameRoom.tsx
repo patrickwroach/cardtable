@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { GameState } from '../types/game';
 import { GameTable } from './GameTable';
 import { PlayerHand } from './PlayerHand';
-import { drawCardFromDeck, playCard, startGame, generateShareableLink, advanceTurnOrPhase } from '../services/gameService';
+import { drawCardFromDeck, playCard, startGame, generateShareableLink, advanceTurnOrPhase, forceEndSession } from '../services/gameService';
 
 /** Minimum number of players required before the host can start. */
 const MIN_PLAYERS_TO_START = 2;
@@ -11,6 +11,8 @@ interface GameRoomProps {
   game: GameState;
   currentPlayerId: string;
   onLeave?: () => void;
+  /** minPlayers from the attached game definition, used to gate the Start button. */
+  gameMinPlayers?: number;
 }
 
 const statusBadgeClass: Record<string, string> = {
@@ -27,20 +29,32 @@ const statusLabel: Record<string, string> = {
   aborted:  'Abandoned',
 };
 
-export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLeave }) => {
-  const [actionError, setActionError]   = useState<string | null>(null);
-  const [linkCopied, setLinkCopied]     = useState(false);
+const endReasonLabel: Record<string, string> = {
+  'win-condition': 'Win condition met',
+  'force-ended':   'Session force-ended by host',
+  'abandoned':     'Session abandoned',
+};
+
+export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLeave, gameMinPlayers }) => {
+  const [actionError, setActionError]       = useState<string | null>(null);
+  const [linkCopied, setLinkCopied]         = useState(false);
+  const [showForceEndConfirm, setShowForceEndConfirm] = useState(false);
 
   const currentPlayer  = game.players[currentPlayerId];
   const isHost         = game.hostId === currentPlayerId;
   const otherPlayers   = Object.values(game.players).filter((p) => p.id !== currentPlayerId);
   const playerCount    = Object.keys(game.players).length;
-  const canStart       = playerCount >= MIN_PLAYERS_TO_START;
+  const minRequired    = gameMinPlayers ?? MIN_PLAYERS_TO_START;
+  const canStart       = playerCount >= minRequired;
 
   // FEAT-004: derived turn / phase values (Tasks 4.1–4.3)
   const isMyTurn          = game.activePlayerId === currentPlayerId;
   const activePlayerName  = game.activePlayerId ? game.players[game.activePlayerId]?.name : undefined;
   const currentPhaseName  = game.phase ?? undefined;
+
+  // FEAT-006: terminal-state helpers
+  const isTerminal = game.status === 'finished' || game.status === 'aborted';
+  const winnerName = game.winner ? (game.players[game.winner]?.name ?? game.winner) : null;
 
   const handleDrawCard = async () => {
     setActionError(null);
@@ -68,7 +82,23 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
       await startGame(game.id);
     } catch (error) {
       console.error('Error starting game:', error);
-      setActionError('Failed to start game. Please try again.');
+      setActionError(error instanceof Error ? error.message : 'Failed to start game. Please try again.');
+    }
+  };
+
+  // FEAT-006: host force-end handlers (Tasks 3.2–3.3)
+  const handleForceEnd = () => {
+    setShowForceEndConfirm(true);
+  };
+
+  const handleForceEndConfirm = async () => {
+    setShowForceEndConfirm(false);
+    setActionError(null);
+    try {
+      await forceEndSession(game.id, currentPlayerId);
+    } catch (error) {
+      console.error('Error force-ending session:', error);
+      setActionError(error instanceof Error ? error.message : 'Failed to end session.');
     }
   };
 
@@ -191,6 +221,36 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
         </div>
       </div>
 
+      {/* FEAT-006 Task 2.1–2.2: End-game screen for terminal states */}
+      {isTerminal && (
+        <div className="bg-white/95 rounded-xl px-5 py-10 mb-5 text-center">
+          <h3 className="text-2xl font-bold text-gray-800 mt-0 mb-3">
+            {game.status === 'finished' ? 'Game Over' : 'Session Ended'}
+          </h3>
+          {winnerName && (
+            <p className="text-lg text-gray-700 mb-2">
+              Winner: <span className="font-semibold text-indigo-600">{winnerName}</span>
+            </p>
+          )}
+          {!winnerName && game.status === 'finished' && (
+            <p className="text-lg text-gray-700 mb-2">It&apos;s a draw!</p>
+          )}
+          {game.endReason && (
+            <p className="text-sm text-gray-500 mb-6">
+              {endReasonLabel[game.endReason] ?? game.endReason}
+            </p>
+          )}
+          {onLeave && (
+            <button
+              className="bg-indigo-500 text-white border-0 px-6 py-2.5 rounded-md cursor-pointer text-sm font-semibold transition-colors hover:bg-indigo-600"
+              onClick={onLeave}
+            >
+              Leave Room
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Waiting state — share panel + host controls */}
       {game.status === 'waiting' && (
         <div className="bg-white/95 rounded-xl px-5 py-8 mb-5">
@@ -222,7 +282,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
           {/* Task 4.2: live roster with waiting count */}
           <p className="text-center text-gray-500 text-sm mb-5">
             {playerCount} player{playerCount !== 1 ? 's' : ''} in room
-            {!canStart && ` — need at least ${MIN_PLAYERS_TO_START} to start`}
+            {!canStart && ` — need at least ${minRequired} to start`}
           </p>
 
           {/* Task 5.2 & 5.3: start button host-only, disabled until min players met */}
@@ -232,15 +292,10 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
                 className="btn-primary--block"
                 onClick={handleStartGame}
                 disabled={!canStart}
-                title={!canStart ? `Need at least ${MIN_PLAYERS_TO_START} players to start` : undefined}
+                title={!canStart ? `Need at least ${minRequired} players to start` : undefined}
               >
                 Start Game
               </button>
-              {!canStart && (
-                <p className="text-gray-400 text-xs mt-2">
-                  Waiting for more players to join…
-                </p>
-              )}
             </div>
           )}
           {!isHost && (
@@ -252,6 +307,44 @@ export const GameRoom: React.FC<GameRoomProps> = ({ game, currentPlayerId, onLea
       {/* Playing state */}
       {game.status === 'playing' && (
         <>
+          {/* FEAT-006 Task 3.2–3.3: Host force-end control with confirmation */}
+          {isHost && !showForceEndConfirm && (
+            <div className="flex justify-end mb-3">
+              <button
+                className="bg-red-500 text-white border-0 px-4 py-2 rounded-md cursor-pointer text-sm font-semibold transition-colors hover:bg-red-600"
+                onClick={handleForceEnd}
+                aria-label="Force end this session"
+              >
+                Force End Session
+              </button>
+            </div>
+          )}
+          {isHost && showForceEndConfirm && (
+            <div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="force-end-heading"
+              className="bg-red-50 border border-red-400 rounded-xl px-5 py-4 mb-3 flex flex-col gap-3"
+            >
+              <p id="force-end-heading" className="text-red-800 font-semibold text-sm">
+                Are you sure you want to force-end this session? This cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  className="bg-red-600 text-white border-0 px-4 py-2 rounded-md cursor-pointer text-sm font-semibold transition-colors hover:bg-red-700"
+                  onClick={handleForceEndConfirm}
+                >
+                  Yes, end session
+                </button>
+                <button
+                  className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-md cursor-pointer text-sm transition-colors hover:bg-gray-50"
+                  onClick={() => setShowForceEndConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <GameTable
             playedCards={game.playedCards}
             deckCount={game.deck.length}

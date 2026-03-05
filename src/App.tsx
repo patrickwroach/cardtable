@@ -93,7 +93,7 @@ function App() {
         window.history.replaceState({}, '', window.location.pathname);
       }
     } catch (err) {
-      setLobbyError('Could not join via link. The room may no longer exist.');
+      setLobbyError(err instanceof Error ? err.message : 'Could not join via link. The room may no longer exist.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -176,7 +176,12 @@ function App() {
           {/* FEAT-007: definition editor access */}
         </>
       ) : (
-        <GameRoom game={currentGame} currentPlayerId={playerId} onLeave={handleBackToLobby} />
+        <GameRoom
+            game={currentGame}
+            currentPlayerId={playerId}
+            onLeave={handleBackToLobby}
+            gameMinPlayers={gameDefinitions.find((d) => d.id === currentGame.gameDefinitionId)?.minPlayers}
+          />
       )}
     </div>
   );
