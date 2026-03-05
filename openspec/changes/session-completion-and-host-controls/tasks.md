@@ -22,3 +22,5 @@
 - [ ] 4.2 End-condition test: trigger win condition, confirm all clients show end screen
 - [ ] 4.3 Post-terminal action test: attempt gameplay mutation after completion, confirm rejection
 - [ ] 4.4 Force-end test: host force-ends stalled session, all clients see terminal state
+- [ ] 4.5 Max-players test: create a Pinochle room (max 4), attempt a 5th join, confirm error "Room is full"
+- [ ] 4.6 Min-players test: create a Pinochle room (min 4) with only 1 player, attempt Start, confirm error "Need at least 4 players"

@@ -54,6 +54,19 @@ export async function joinGame(gameId: string, playerId: string, playerName: str
   if (!gameDoc.exists()) {
     throw new Error('Game not found');
   }
+
+  const roomData = gameDoc.data() as GameState;
+
+  // Enforce maxPlayers from the attached game definition
+  if (roomData.gameDefinitionId) {
+    const def = await getGameDefinition(roomData.gameDefinitionId);
+    if (def?.maxPlayers !== undefined) {
+      const currentCount = Object.keys(roomData.players).length;
+      if (!roomData.players[playerId] && currentCount >= def.maxPlayers) {
+        throw new Error(`This room is full (max ${def.maxPlayers} players).`);
+      }
+    }
+  }
   
   const newPlayer: Player = {
     id: playerId,
@@ -79,8 +92,17 @@ export async function startGame(gameId: string): Promise<void> {
   let firstPhase: string | undefined;
   if (data.gameDefinitionId) {
     const def = await getGameDefinition(data.gameDefinitionId);
-    if (def && def.turnPhases.length > 0) {
-      firstPhase = def.turnPhases[0].id;
+    if (def) {
+      // Enforce minPlayers before starting
+      if (def.minPlayers !== undefined) {
+        const playerCount = Object.keys(data.players).length;
+        if (playerCount < def.minPlayers) {
+          throw new Error(`Need at least ${def.minPlayers} player${def.minPlayers === 1 ? '' : 's'} to start (have ${playerCount}).`);
+        }
+      }
+      if (def.turnPhases.length > 0) {
+        firstPhase = def.turnPhases[0].id;
+      }
     }
   }
 
@@ -113,6 +135,8 @@ export async function drawCardFromDeck(gameId: string, playerId: string, count: 
     deck: remainingDeck,
     [`players.${playerId}.hand`]: updatedHand
   });
+  // FEAT-006 Task 1.2: check end condition after every gameplay mutation
+  await evaluateEndCondition(gameId);
 }
 
 export async function playCard(gameId: string, playerId: string, cardId: string): Promise<void> {
@@ -141,6 +165,8 @@ export async function playCard(gameId: string, playerId: string, cardId: string)
     [`players.${playerId}.hand`]: updatedHand,
     playedCards: arrayUnion({ ...card, faceUp: true })
   });
+  // FEAT-006 Task 1.2: check end condition after every gameplay mutation
+  await evaluateEndCondition(gameId);
 }
 
 export function subscribeToGame(gameId: string, callback: (game: GameState) => void): Unsubscribe {
@@ -194,6 +220,10 @@ export async function validateTurnAction(
   const snap = await getDoc(doc(db, ROOMS_COLLECTION, gameId));
   if (!snap.exists()) throw new Error('Room not found');
   const data = snap.data() as GameState;
+  // FEAT-006 Task 1.4: explicit post-terminal rejection
+  if (data.status === 'finished' || data.status === 'aborted') {
+    throw new Error('This session has ended — no further gameplay actions are accepted.');
+  }
   if (data.status !== 'playing') throw new Error('The game is not in progress.');
   if (data.activePlayerId !== playerId) {
     const activePlayer = data.players[data.activePlayerId ?? ''];
@@ -244,15 +274,16 @@ export async function advanceTurnOrPhase(
           `Phase "${data.phase}" not found in game definition — check your game configuration.`
         );
       }
-      if (currentPhase.transitions.length === 0) {
-        // No outgoing transitions: stay on this phase
-        if (wrappedAround) incrementTurn = true;
+      if (currentPhase.nextPhaseId === null) {
+        // Loop back to first phase
+        nextPhase = def.turnPhases[0].id;
+        const currentPhaseIndex = def.turnPhases.findIndex((p) => p.id === currentPhase.id);
+        if (currentPhaseIndex === def.turnPhases.length - 1) incrementTurn = true;
       } else {
-        // Take the first valid transition (simple MVP rule evaluation)
-        const nextPhaseId = currentPhase.transitions[0].toPhaseId;
+        // Advance to declared next phase
+        const nextPhaseId = currentPhase.nextPhaseId;
         const nextPhaseIndex = def.turnPhases.findIndex((p) => p.id === nextPhaseId);
         const currentPhaseIndex = def.turnPhases.findIndex((p) => p.id === currentPhase.id);
-        // Detect phase-graph cycle: stepping back to an earlier phase = new turn
         if (nextPhaseIndex <= currentPhaseIndex) incrementTurn = true;
         nextPhase = nextPhaseId;
       }
@@ -274,11 +305,99 @@ export async function advanceTurnOrPhase(
       ...(nextPhase !== undefined ? { phase: nextPhase } : {}),
     });
   });
+  // FEAT-006 Task 1.2: check end condition after every gameplay mutation
+  await evaluateEndCondition(gameId);
 }
 
 // ---------------------------------------------------------------------------
 // FEAT-006: Session Completion & Host Controls
 // ---------------------------------------------------------------------------
+
+/**
+ * Evaluates a structured WinCondition trigger against current room state.
+ * Pool values are read from player-level resource counters on the room state.
+ * Falls back to built-in derived pools: "hand_size" and "deck_size".
+ * (FEAT-006/008 Task 6.6)
+ */
+function checkWinCondition(
+  wc: import('../types/gameDefinition').WinCondition,
+  state: GameState,
+  _playerId: string
+): { met: boolean; loserId?: string; winnerId?: string } {
+  const { poolId, operator, value, subject } = wc.trigger;
+
+  // Resolve which player IDs to check based on subject
+  const playerIds = Object.keys(state.players);
+  const subjects: string[] =
+    subject === 'any_player' ? playerIds
+    : subject === 'self'     ? [state.activePlayerId ?? '']
+    : playerIds.filter((id) => id !== state.activePlayerId);
+
+  for (const pid of subjects) {
+    const poolValue = resolvePoolValue(poolId, pid, state);
+    if (poolValue === undefined) continue;
+    const met = evalOperator(poolValue, operator, value);
+    if (!met) continue;
+    if (wc.outcome === 'subject_loses') {
+      // The other player(s) win
+      const winner = playerIds.find((id) => id !== pid);
+      return { met: true, loserId: pid, winnerId: winner };
+    }
+    if (wc.outcome === 'subject_wins') return { met: true, winnerId: pid };
+    if (wc.outcome === 'draw')        return { met: true };
+  }
+  return { met: false };
+}
+
+function resolvePoolValue(
+  poolId: string,
+  playerId: string,
+  state: GameState
+): number | undefined {
+  // Built-in derived pools
+  if (poolId === 'hand_size') return state.players[playerId]?.hand.length ?? 0;
+  if (poolId === 'deck_size') return state.deck.length;
+  // Player-level named pool counters stored as resourcePools on room state
+  const pools = (state as GameState & { resourcePoolValues?: Record<string, Record<string, number>> })
+    .resourcePoolValues;
+  return pools?.[playerId]?.[poolId];
+}
+
+function evalOperator(actual: number, op: string, expected: number): boolean {
+  switch (op) {
+    case 'eq':  return actual === expected;
+    case 'lt':  return actual <   expected;
+    case 'lte': return actual <=  expected;
+    case 'gt':  return actual >   expected;
+    case 'gte': return actual >=  expected;
+    default:    return false;
+  }
+}
+
+/**
+ * Evaluates all win conditions configured in the attached game definition against
+ * the current room state.  When a condition is met, calls `completeSession` and
+ * returns.  No-op if the session is not active or has no game definition.
+ * (FEAT-006 Task 1.1)
+ */
+export async function evaluateEndCondition(roomId: string): Promise<void> {
+  const snap = await getDoc(doc(db, ROOMS_COLLECTION, roomId));
+  if (!snap.exists()) return;
+  const data = snap.data() as GameState;
+  if (data.status !== 'playing') return;
+  if (!data.gameDefinitionId) return;
+
+  const def = await getGameDefinition(data.gameDefinitionId);
+  if (!def || def.winConditions.length === 0) return;
+
+  for (const wc of def.winConditions) {
+    const result = checkWinCondition(wc, data, data.activePlayerId ?? '');
+    if (result.met) {
+      await completeSession(roomId, result.winnerId ?? '', data.activePlayerId ?? '');
+      return;
+    }
+  }
+}
 
 /**
  * Marks the session finished with a winner and end reason (FEAT-006).

@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { GameLobby } from './components/GameLobby';
+import type { GameDefinitionSummary } from './components/GameLobby';
 import { GameRoom } from './components/GameRoom';
 import { GameDefinitionEditor } from './components/GameDefinitionEditor';
 import type { GameState } from './types/game';
 import { createGame, joinGame, joinGameByLink, subscribeToGame } from './services/gameService';
 import { ensureAnonymousAuth } from './firebase/config';
+import { listGameDefinitions } from './services/gameDefinitionService';
 
 function App() {
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
@@ -16,6 +18,7 @@ function App() {
   const [error, setError]       = useState<string | null>(null);
   const [lobbyError, setLobbyError] = useState<string | null>(null);
   const [showDefinitionEditor, setShowDefinitionEditor] = useState(false);
+  const [gameDefinitions, setGameDefinitions] = useState<GameDefinitionSummary[]>([]);
 
   // Task 3.2: detect ?join=<gameId> URL param on mount
   const [roomToJoin] = useState<string | null>(() => {
@@ -26,7 +29,11 @@ function App() {
   // Sign in anonymously on mount so Firestore rules pass.
   useEffect(() => {
     ensureAnonymousAuth()
-      .then((uid) => setPlayerId(uid))
+      .then((uid) => {
+        setPlayerId(uid);
+        return listGameDefinitions();
+      })
+      .then((defs) => setGameDefinitions(defs.map((d) => ({ id: d.id, name: d.name, minPlayers: d.minPlayers, maxPlayers: d.maxPlayers }))))
       .catch(() => setError('Could not connect to authentication service. Please refresh.'));
   }, []);
 
@@ -37,13 +44,13 @@ function App() {
     return () => unsubscribe();
   }, [currentGameId]);
 
-  const handleCreateGame = async (playerName: string) => {
+  const handleCreateGame = async (playerName: string, definitionId?: string) => {
     if (!playerId) return;
     setLoading(true);
     setError(null);
     setLobbyError(null);
     try {
-      const gameId = await createGame(playerId, playerName);
+      const gameId = await createGame(playerId, playerName, definitionId);
       setCurrentGameId(gameId);
     } catch (err) {
       setError('Failed to create game. Please check your Firebase configuration.');
@@ -147,7 +154,12 @@ function App() {
       {showDefinitionEditor && playerId ? (
         <GameDefinitionEditor
           creatorId={playerId}
-          onClose={() => setShowDefinitionEditor(false)}
+          onClose={() => {
+            setShowDefinitionEditor(false);
+            listGameDefinitions()
+              .then((defs) => setGameDefinitions(defs.map((d) => ({ id: d.id, name: d.name, minPlayers: d.minPlayers, maxPlayers: d.maxPlayers }))))
+              .catch(() => {/* non-fatal */});
+          }}
         />
       ) : !currentGame ? (
         <>
@@ -159,6 +171,7 @@ function App() {
             joinError={lobbyError}
             loading={loading}
             onOpenDefinitionEditor={() => setShowDefinitionEditor(true)}
+            gameDefinitions={gameDefinitions}
           />
           {/* FEAT-007: definition editor access */}
         </>

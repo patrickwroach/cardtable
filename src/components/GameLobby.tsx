@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
 
+export interface GameDefinitionSummary {
+  id: string;
+  name: string;
+  minPlayers?: number;
+  maxPlayers?: number;
+}
+
 interface GameLobbyProps {
-  onCreateGame: (playerName: string) => void;
+  onCreateGame: (playerName: string, definitionId?: string) => void;
   onJoinGame: (gameId: string, playerName: string) => void;
+  gameDefinitions?: GameDefinitionSummary[];
   /** Called when joining via a ?join= URL param link */
   onJoinByLink: (gameId: string, playerName: string) => void;
   /** Pre-populate the join form with this room ID (from ?join= URL param) */
@@ -23,9 +31,11 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
   joinError,
   loading = false,
   onOpenDefinitionEditor,
+  gameDefinitions = [],
 }) => {
   const [playerName, setPlayerName] = useState('');
   const [gameId, setGameId]         = useState(roomToJoin ?? '');
+  const [selectedDefinitionId, setSelectedDefinitionId] = useState('');
 
   // If arriving via a shareable link, go straight to the join form.
   const initialMode = roomToJoin ? 'join' : 'menu';
@@ -33,7 +43,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (playerName.trim()) onCreateGame(playerName.trim());
+    if (playerName.trim()) onCreateGame(playerName.trim(), selectedDefinitionId || undefined);
   };
 
   const handleJoin = (e: React.FormEvent) => {
@@ -98,6 +108,32 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
                 className={inputClass}
               />
             </div>
+            {gameDefinitions.length > 0 && (
+              <div className="mb-5">
+                <label htmlFor="create-game-def" className={labelClass}>
+                  Game
+                </label>
+                <select
+                  id="create-game-def"
+                  value={selectedDefinitionId}
+                  onChange={(e) => setSelectedDefinitionId(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">— Pick a game (optional) —</option>
+                  {gameDefinitions.map((def) => {
+                    const players =
+                      def.minPlayers !== undefined || def.maxPlayers !== undefined
+                        ? ` (${def.minPlayers ?? 1}–${def.maxPlayers ?? '∞'} players)`
+                        : '';
+                    return (
+                      <option key={def.id} value={def.id}>
+                        {def.name}{players}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
             <div className="flex gap-3 mt-8">
               <button type="submit" className="btn-primary" disabled={loading}>
                 {loading ? 'Creating…' : 'Create Room'}

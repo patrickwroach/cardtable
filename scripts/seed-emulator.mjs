@@ -67,22 +67,28 @@ async function upsert(collection, docId, data) {
 // Data builders
 // ---------------------------------------------------------------------------
 
-const SUITS   = ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
-const RANKS   = ['Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'];
+const SUITS        = ['Spades', 'Hearts', 'Diamonds', 'Clubs'];
 const PINOCLE_RANKS = ['9', '10', 'Jack', 'Queen', 'King', 'Ace'];
+const EUCHRE_RANKS  = ['9', '10', 'Jack', 'Queen', 'King', 'Ace'];
 
 function slug(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-/** Standard 52-card deck */
-function buildStandardDeck() {
+/** Euchre deck: one copy of 9–A in each suit (24 cards) */
+function buildEuchreDeck() {
   const cards = [];
+  // Ace high for trick-taking; bower logic (J of trump / J of same color) is runtime
+  const rankOrder = { '9': 1, '10': 2, 'Jack': 3, 'Queen': 4, 'King': 5, 'Ace': 6 };
   for (const suit of SUITS) {
-    for (const rank of RANKS) {
+    for (const rank of EUCHRE_RANKS) {
       const id = `${slug(rank)}-of-${slug(suit)}`;
-      const pointValue = ['Ace', 'King', 'Queen', 'Jack', '10'].includes(rank) ? 10 : parseInt(rank, 10) || 0;
-      cards.push({ id, name: `${rank} of ${suit}`, type: suit.toLowerCase(), metadata: { suit, rank, pointValue } });
+      cards.push({
+        id,
+        name: `${rank} of ${suit}`,
+        type: suit.toLowerCase(),
+        metadata: { suit, rank, rankOrder: rankOrder[rank] ?? 0 },
+      });
     }
   }
   return cards;
@@ -133,29 +139,59 @@ function buildDanDanCards() {
   ];
 }
 
+/** Minimal test game — 5 cards, empty-hand win condition for runtime evaluation testing */
+function buildTestCards() {
+  return [
+    { id: 'test-card-1', name: 'Test Card 1', type: 'standard', metadata: {} },
+    { id: 'test-card-2', name: 'Test Card 2', type: 'standard', metadata: {} },
+    { id: 'test-card-3', name: 'Test Card 3', type: 'standard', metadata: {} },
+    { id: 'test-card-4', name: 'Test Card 4', type: 'standard', metadata: {} },
+    { id: 'test-card-5', name: 'Test Card 5', type: 'standard', metadata: {} },
+  ];
+}
+
 const definitions = [
   {
-    id: 'standard-52-card-deck',
+    id: 'empty-hand-test',
     creatorId: CREATOR_ID,
-    name: 'Standard 52-Card Deck',
+    name: 'Empty Hand Test (7.6)',
     schemaVersion: 1,
-    cards: buildStandardDeck(),
-    deckRules: {
-      minCards: 1,
-      maxCards: 52,
-      requiredCardIds: [],
-      maxCopiesPerCard: 1,
-    },
-    turnPhases: [],
-    winConditions: [],
+    minPlayers: 1,
+    maxPlayers: 4,
+    cards: buildTestCards(),
+    deckRules: { minCards: 5, maxCards: 5, requiredCardIds: [], maxCopiesPerCard: 1 },
+    zones: [
+      { id: 'hand', label: 'Hand', owner: 'per-player', visibility: 'private', ordered: false, interactable: true, persistent: false },
+      { id: 'discard', label: 'Discard', owner: 'global', visibility: 'public', ordered: false, interactable: false, persistent: false },
+    ],
+    resourcePools: [],
+    turnPhases: [
+      {
+        id: 'play',
+        label: 'Play',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'zone_empty', zoneId: 'hand' }],
+        nextPhaseId: null,
+      },
+    ],
+    winConditions: [
+      {
+        id: 'empty-hand-wins',
+        description: 'First player to empty their hand wins.',
+        trigger: { subject: 'any_player', poolId: 'hand_size', operator: 'lte', value: 0 },
+        outcome: 'subject_wins',
+      },
+    ],
     createdAt: NOW,
     updatedAt: NOW,
   },
   {
     id: 'pinochle-deck',
     creatorId: CREATOR_ID,
-    name: 'Pinochle Deck',
+    name: 'Pinochle',
     schemaVersion: 1,
+    minPlayers: 4,
+    maxPlayers: 4,
     cards: buildPinochleDeck(),
     deckRules: {
       minCards: 48,
@@ -163,8 +199,151 @@ const definitions = [
       requiredCardIds: [],
       maxCopiesPerCard: 2,
     },
-    turnPhases: [],
-    winConditions: [],
+    zones: [
+      {
+        id: 'hand',
+        label: 'Hand',
+        owner: 'per-player',
+        visibility: 'private',
+        ordered: true,
+        interactable: true,
+        persistent: false,
+      },
+      {
+        id: 'trick',
+        label: 'Current Trick',
+        owner: 'global',
+        visibility: 'public',
+        ordered: true,
+        interactable: true,
+        persistent: false,
+      },
+      {
+        id: 'meld',
+        label: 'Meld Area',
+        owner: 'per-player',
+        visibility: 'public',
+        ordered: false,
+        interactable: false,
+        persistent: false,
+      },
+      {
+        id: 'won-tricks',
+        label: 'Won Tricks',
+        owner: 'per-player',
+        visibility: 'hidden',
+        ordered: false,
+        interactable: false,
+        persistent: false,
+      },
+      {
+        id: 'kitty',
+        label: 'Kitty / Widow',
+        owner: 'global',
+        visibility: 'hidden',
+        ordered: false,
+        interactable: false,
+        persistent: false,
+      },
+    ],
+    resourcePools: [
+      {
+        id: 'score',
+        label: 'Score',
+        scope: 'persistent',
+        initialValue: 0,
+        min: 0,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: false,
+        owner: 'player',
+      },
+      {
+        id: 'bid',
+        label: 'Bid',
+        scope: 'round',
+        initialValue: 0,
+        min: 0,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: true,
+        owner: 'player',
+      },
+      {
+        id: 'trick-points',
+        label: 'Trick Points (this hand)',
+        scope: 'round',
+        initialValue: 0,
+        min: 0,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: true,
+        owner: 'player',
+      },
+    ],
+    turnPhases: [
+      {
+        id: 'deal',
+        label: 'Deal',
+        poolReplenishments: [
+          { poolId: 'bid', amount: 0 },
+          { poolId: 'trick-points', amount: 0 },
+        ],
+        transitionConditions: [
+          { type: 'zone_empty', zoneId: 'kitty' },
+        ],
+        nextPhaseId: 'bidding',
+      },
+      {
+        id: 'bidding',
+        label: 'Bidding',
+        poolReplenishments: [],
+        transitionConditions: [
+          { type: 'manual' },
+        ],
+        nextPhaseId: 'meld',
+      },
+      {
+        id: 'meld',
+        label: 'Meld',
+        poolReplenishments: [],
+        transitionConditions: [
+          { type: 'manual' },
+        ],
+        nextPhaseId: 'trick-taking',
+      },
+      {
+        id: 'trick-taking',
+        label: 'Trick-Taking',
+        poolReplenishments: [],
+        transitionConditions: [
+          { type: 'zone_empty', zoneId: 'hand' },
+        ],
+        nextPhaseId: 'scoring',
+      },
+      {
+        id: 'scoring',
+        label: 'Scoring',
+        poolReplenishments: [],
+        transitionConditions: [
+          { type: 'manual' },
+        ],
+        nextPhaseId: null,
+      },
+    ],
+    winConditions: [
+      {
+        id: 'reach-1500',
+        description: 'First player to accumulate 1500 or more points wins.',
+        trigger: {
+          subject: 'any_player',
+          poolId: 'score',
+          operator: 'gte',
+          value: 1500,
+        },
+        outcome: 'subject_wins',
+      },
+    ],
     createdAt: NOW,
     updatedAt: NOW,
   },
@@ -173,6 +352,8 @@ const definitions = [
     creatorId: CREATOR_ID,
     name: 'DanDan (MtG Commons Format)',
     schemaVersion: 1,
+    minPlayers: 2,
+    maxPlayers: 2,
     cards: buildDanDanCards(),
     deckRules: {
       minCards: 40,
@@ -180,8 +361,319 @@ const definitions = [
       requiredCardIds: ['island', 'dandan'],
       maxCopiesPerCard: 4,
     },
-    turnPhases: [],
-    winConditions: [],
+    zones: [
+      {
+        id: 'library',
+        label: 'Library',
+        owner: 'per-player',
+        visibility: 'hidden',
+        ordered: true,
+        interactable: false,
+        persistent: true,
+      },
+      {
+        id: 'hand',
+        label: 'Hand',
+        owner: 'per-player',
+        visibility: 'private',
+        ordered: false,
+        interactable: true,
+        persistent: true,
+      },
+      {
+        id: 'battlefield',
+        label: 'Battlefield',
+        owner: 'per-player',
+        visibility: 'public',
+        ordered: false,
+        interactable: true,
+        persistent: true,
+      },
+      {
+        id: 'graveyard',
+        label: 'Graveyard',
+        owner: 'per-player',
+        visibility: 'public',
+        ordered: true,
+        interactable: false,
+        persistent: true,
+      },
+      {
+        id: 'exile',
+        label: 'Exile',
+        owner: 'global',
+        visibility: 'public',
+        ordered: false,
+        interactable: false,
+        persistent: true,
+      },
+      {
+        id: 'stack',
+        label: 'Stack',
+        owner: 'global',
+        visibility: 'public',
+        ordered: true,
+        interactable: false,
+        persistent: false,
+      },
+    ],
+    resourcePools: [
+      {
+        id: 'life',
+        label: 'Life Total',
+        scope: 'persistent',
+        initialValue: 20,
+        min: 0,
+        direction: 'bidirectional',
+        spendable: false,
+        expireUnspent: false,
+        owner: 'player',
+      },
+      {
+        id: 'mana',
+        label: 'Mana Pool',
+        scope: 'phase',
+        initialValue: 0,
+        min: 0,
+        direction: 'bidirectional',
+        spendable: true,
+        expireUnspent: true,
+        owner: 'player',
+      },
+      {
+        id: 'poison',
+        label: 'Poison Counters',
+        scope: 'persistent',
+        initialValue: 0,
+        min: 0,
+        max: 10,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: false,
+        owner: 'player',
+      },
+    ],
+    turnPhases: [
+      {
+        id: 'untap',
+        label: 'Untap',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'upkeep',
+      },
+      {
+        id: 'upkeep',
+        label: 'Upkeep',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'draw',
+      },
+      {
+        id: 'draw',
+        label: 'Draw',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'main1',
+      },
+      {
+        id: 'main1',
+        label: 'Main Phase 1',
+        poolReplenishments: [{ poolId: 'mana', amount: 'full' }],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'combat',
+      },
+      {
+        id: 'combat',
+        label: 'Combat',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'main2',
+      },
+      {
+        id: 'main2',
+        label: 'Main Phase 2',
+        poolReplenishments: [{ poolId: 'mana', amount: 'full' }],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'end',
+      },
+      {
+        id: 'end',
+        label: 'End Step',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: null,
+      },
+    ],
+    winConditions: [
+      {
+        id: 'life-zero',
+        description: 'A player whose life total reaches 0 loses.',
+        trigger: {
+          subject: 'any_player',
+          poolId: 'life',
+          operator: 'lte',
+          value: 0,
+        },
+        outcome: 'subject_loses',
+      },
+      {
+        id: 'poison-ten',
+        description: 'A player who accumulates 10 or more poison counters loses.',
+        trigger: {
+          subject: 'any_player',
+          poolId: 'poison',
+          operator: 'gte',
+          value: 10,
+        },
+        outcome: 'subject_loses',
+      },
+    ],
+    createdAt: NOW,
+    updatedAt: NOW,
+  },
+  {
+    id: 'euchre',
+    creatorId: CREATOR_ID,
+    name: 'Euchre',
+    schemaVersion: 1,
+    minPlayers: 4,
+    maxPlayers: 4,
+    cards: buildEuchreDeck(),
+    deckRules: {
+      minCards: 24,
+      maxCards: 24,
+      requiredCardIds: [],
+      maxCopiesPerCard: 1,
+    },
+    zones: [
+      {
+        id: 'hand',
+        label: 'Hand',
+        owner: 'per-player',
+        visibility: 'private',
+        ordered: true,
+        interactable: true,
+        persistent: false,
+      },
+      {
+        id: 'trick',
+        label: 'Current Trick',
+        owner: 'global',
+        visibility: 'public',
+        ordered: true,
+        interactable: true,
+        persistent: false,
+      },
+      {
+        id: 'won-tricks',
+        label: 'Won Tricks',
+        owner: 'per-team',
+        visibility: 'hidden',
+        ordered: false,
+        interactable: false,
+        persistent: false,
+      },
+      {
+        id: 'kitty',
+        label: 'Kitty (4 face-down)',
+        owner: 'global',
+        visibility: 'hidden',
+        ordered: false,
+        interactable: false,
+        persistent: false,
+      },
+    ],
+    resourcePools: [
+      {
+        id: 'team-score',
+        label: 'Team Score',
+        scope: 'persistent',
+        initialValue: 0,
+        min: 0,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: false,
+        owner: 'team',
+      },
+      {
+        id: 'tricks-taken',
+        label: 'Tricks Taken (this hand)',
+        scope: 'round',
+        initialValue: 0,
+        min: 0,
+        max: 5,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: true,
+        owner: 'team',
+      },
+      {
+        id: 'bid-team',
+        label: 'Bid / Maker Team',
+        scope: 'round',
+        initialValue: 0,
+        min: 0,
+        direction: 'up',
+        spendable: false,
+        expireUnspent: true,
+        owner: 'team',
+      },
+    ],
+    turnPhases: [
+      {
+        id: 'deal',
+        label: 'Deal',
+        poolReplenishments: [
+          { poolId: 'tricks-taken', amount: 0 },
+          { poolId: 'bid-team', amount: 0 },
+        ],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'bid-round-1',
+      },
+      {
+        id: 'bid-round-1',
+        label: 'Bid Round 1 — Order Up or Pass',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'bid-round-2',
+      },
+      {
+        id: 'bid-round-2',
+        label: 'Bid Round 2 — Name a Suit or Pass (Stick the Dealer)',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: 'trick-taking',
+      },
+      {
+        id: 'trick-taking',
+        label: 'Trick-Taking (5 tricks)',
+        poolReplenishments: [],
+        transitionConditions: [
+          { type: 'zone_empty', zoneId: 'hand' },
+        ],
+        nextPhaseId: 'scoring',
+      },
+      {
+        id: 'scoring',
+        label: 'Scoring',
+        poolReplenishments: [],
+        transitionConditions: [{ type: 'manual' }],
+        nextPhaseId: null,
+      },
+    ],
+    winConditions: [
+      {
+        id: 'reach-10',
+        description: 'First team to reach 10 points wins.',
+        trigger: {
+          subject: 'any_player',
+          poolId: 'team-score',
+          operator: 'gte',
+          value: 10,
+        },
+        outcome: 'subject_wins',
+      },
+    ],
     createdAt: NOW,
     updatedAt: NOW,
   },

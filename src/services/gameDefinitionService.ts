@@ -68,23 +68,51 @@ export function validateGameDefinition(def: GameDefinition): string[] {
   // Reuse the card/deck utility (FEAT-007)
   const errors: string[] = validateCardAndDeckRules(def);
 
-  // FEAT-008: phase graph — no orphaned transitions
+  // FEAT-008: build id sets for cross-reference checks
+  const zoneIds = new Set((def.zones ?? []).map((z) => z.id));
+  const poolIds = new Set((def.resourcePools ?? []).map((p) => p.id));
+
+  // Duplicate zone IDs
+  const seenZone = new Set<string>();
+  for (const z of def.zones ?? []) {
+    if (!z.id) errors.push('A zone is missing an id.');
+    else if (seenZone.has(z.id)) errors.push(`Duplicate zone id: "${z.id}".`);
+    else seenZone.add(z.id);
+  }
+
+  // Duplicate pool IDs
+  const seenPool = new Set<string>();
+  for (const p of def.resourcePools ?? []) {
+    if (!p.id) errors.push('A resource pool is missing an id.');
+    else if (seenPool.has(p.id)) errors.push(`Duplicate pool id: "${p.id}".`);
+    else seenPool.add(p.id);
+  }
+
+  // FEAT-008: phase graph — no orphaned nextPhaseId references
   const phaseIds = new Set(def.turnPhases.map((p) => p.id));
   for (const phase of def.turnPhases) {
-    if (!phase.id || !phase.name)
-      errors.push(`Phase is missing id or name.`);
-    for (const t of phase.transitions) {
-      if (!phaseIds.has(t.toPhaseId))
-        errors.push(
-          `Phase "${phase.id}" transitions to unknown phase "${t.toPhaseId}".`
-        );
+    if (!phase.id || !phase.label)
+      errors.push(`Phase is missing id or label.`);
+    if (phase.nextPhaseId !== null && !phaseIds.has(phase.nextPhaseId))
+      errors.push(`Phase "${phase.id}" has nextPhaseId "${phase.nextPhaseId}" which does not exist.`);
+    for (const tc of phase.transitionConditions ?? []) {
+      if (tc.poolId && !poolIds.has(tc.poolId))
+        errors.push(`Phase "${phase.id}" transition references unknown pool "${tc.poolId}".`);
+      if (tc.zoneId && !zoneIds.has(tc.zoneId))
+        errors.push(`Phase "${phase.id}" transition references unknown zone "${tc.zoneId}".`);
+    }
+    for (const rep of phase.poolReplenishments ?? []) {
+      if (!poolIds.has(rep.poolId))
+        errors.push(`Phase "${phase.id}" replenishment references unknown pool "${rep.poolId}".`);
     }
   }
 
-  // FEAT-008: win conditions must have a condition string
+  // FEAT-008: win conditions must have structured trigger
   for (const wc of def.winConditions) {
-    if (!wc.id || !wc.condition)
-      errors.push(`Win condition is missing id or condition.`);
+    if (!wc.id || !wc.trigger)
+      errors.push(`Win condition "${wc.id || '?'}" is missing id or trigger.`);
+    else if (!poolIds.has(wc.trigger.poolId))
+      errors.push(`Win condition "${wc.id}" references unknown pool "${wc.trigger.poolId}".`);
   }
 
   return errors;
@@ -244,3 +272,129 @@ export async function importAndSaveGameDefinition(
   await saveGameDefinition(hydrated);
   return hydrated;
 }
+
+// ---------------------------------------------------------------------------
+// FEAT-008: Rules & Win Conditions — Deep validation (Task 6.1–6.5)
+// ---------------------------------------------------------------------------
+
+const KNOWN_TRANSITION_TYPES = new Set([
+  'pool_threshold',
+  'pool_depleted',
+  'pool_full',
+  'zone_empty',
+  'zone_full',
+  'turn_count',
+  'manual',
+]);
+
+/**
+ * Deep validation of the rules layer: zones, resource pools, turn-phase graph,
+ * and win conditions.
+ *
+ * Returns:
+ *   - `errors`   — must be resolved before saving (save is blocked)
+ *   - `warnings` — saved but definition is marked incomplete
+ */
+export function validateRulesDefinition(def: GameDefinition): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const zoneIds = new Set(def.zones.map((z) => z.id));
+  const poolIds = new Set(def.resourcePools.map((p) => p.id));
+  const phaseIds = new Set(def.turnPhases.map((ph) => ph.id));
+
+  // Label-lookup helpers so messages read "Label (id)" instead of just "id"
+  const zoneLabel  = (id: string) => { const z = def.zones.find((z) => z.id === id);          return z  ? `${z.label} (${id})`  : `(${id})`; };
+  const poolLabel  = (id: string) => { const p = def.resourcePools.find((p) => p.id === id);  return p  ? `${p.label} (${id})`  : `(${id})`; };
+  const phaseLabel = (id: string) => { const ph = def.turnPhases.find((ph) => ph.id === id);  return ph ? `${ph.label} (${id})` : `(${id})`; };
+  const wcLabel    = (id: string) => { const w = def.winConditions.find((w) => w.id === id);  return w?.description ? `${w.description} (${id})` : `(${id})`; };
+
+  // --- Resource pool semantic warnings (3.3) ---
+  for (const pool of def.resourcePools) {
+    if (pool.direction === 'up' && pool.expireUnspent) {
+      warnings.push(`Pool ${poolLabel(pool.id)}: up-only direction with expireUnspent=true discards all accumulated value each phase reset.`);
+    }
+  }
+
+  // --- Turn phase graph validation ---
+
+  // Build incoming-edge count for unreachable-phase detection (6.3)
+  const incomingCount = new Map<string, number>();
+  for (const id of phaseIds) incomingCount.set(id, 0);
+  for (const ph of def.turnPhases) {
+    if (ph.nextPhaseId !== null) {
+      incomingCount.set(ph.nextPhaseId, (incomingCount.get(ph.nextPhaseId) ?? 0) + 1);
+    }
+  }
+
+  // Detect unreachable phases — no incoming edges (except first phase which is the entry point)
+  if (def.turnPhases.length > 1) {
+    const [first, ...rest] = def.turnPhases;
+    void first; // entry point, skip
+    for (const ph of rest) {
+      if ((incomingCount.get(ph.id) ?? 0) === 0) {
+        warnings.push(`Phase ${phaseLabel(ph.id)} is unreachable — no phase transitions lead to it.`);
+      }
+    }
+  }
+
+  // Detect circular phase graph with no exit path (6.2)
+  if (def.turnPhases.length > 0) {
+    const hasExitPhase = def.turnPhases.some((ph) => ph.nextPhaseId === null);
+    if (!hasExitPhase) {
+      const visited = new Set<string>();
+      const inStack = new Set<string>();
+      let hasCycle = false;
+
+      const dfs = (id: string): void => {
+        if (inStack.has(id)) { hasCycle = true; return; }
+        if (visited.has(id)) return;
+        visited.add(id);
+        inStack.add(id);
+        const ph = def.turnPhases.find((p) => p.id === id);
+        if (ph?.nextPhaseId) dfs(ph.nextPhaseId);
+        inStack.delete(id);
+      };
+
+      for (const ph of def.turnPhases) dfs(ph.id);
+      if (hasCycle) {
+        errors.push('Turn phase graph contains a cycle with no exit path (no phase has nextPhaseId = null). The game can never end via phase progression.');
+      }
+    }
+  }
+
+  // Phase cross-references (4.4 / 4.5)
+  for (const ph of def.turnPhases) {
+    if (ph.nextPhaseId !== null && !phaseIds.has(ph.nextPhaseId)) {
+      errors.push(`Phase ${phaseLabel(ph.id)}: nextPhaseId references undeclared phase (${ph.nextPhaseId}).`);
+    }
+    for (const r of ph.poolReplenishments) {
+      if (!poolIds.has(r.poolId)) {
+        errors.push(`Phase ${phaseLabel(ph.id)}: pool replenishment references undeclared pool (${r.poolId}).`);
+      }
+    }
+    for (const cond of ph.transitionConditions) {
+      if (cond.poolId && !poolIds.has(cond.poolId)) {
+        errors.push(`Phase ${phaseLabel(ph.id)} transition condition: references undeclared pool ${poolLabel(cond.poolId)}.`);
+      }
+      if (cond.zoneId && !zoneIds.has(cond.zoneId)) {
+        errors.push(`Phase ${phaseLabel(ph.id)} transition condition: references undeclared zone ${zoneLabel(cond.zoneId)}.`);
+      }
+      if (!KNOWN_TRANSITION_TYPES.has(cond.type)) {
+        warnings.push(`Phase ${phaseLabel(ph.id)} transition condition: unknown type "${cond.type}" — not in the built-in registry.`);
+      }
+    }
+  }
+
+  // Win condition cross-references (5.2 / 6.4)
+  // Built-in runtime pools (resolved by evaluateEndCondition) are always valid
+  const BUILTIN_POOL_IDS = new Set(['hand_size', 'deck_size']);
+  for (const wc of def.winConditions) {
+    if (!BUILTIN_POOL_IDS.has(wc.trigger.poolId) && !poolIds.has(wc.trigger.poolId)) {
+      errors.push(`Win condition ${wcLabel(wc.id)}: trigger references undeclared pool (${wc.trigger.poolId}).`);
+    }
+  }
+
+  return { errors, warnings };
+}
+
